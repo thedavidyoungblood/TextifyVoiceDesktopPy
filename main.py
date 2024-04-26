@@ -27,7 +27,7 @@ def extrair_e_transcrever(text_var):
     comando_ffmpeg = ["ffmpeg", "-i", filepath, "-vn", "-acodec", "copy", arquivoTemporarioAudio]
     subprocess.run(comando_ffmpeg, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    # Atualiza o texto para mostrar que a desgravação está em andamento
+
     text_var.set("Desgravando... ⏳ Por favor, aguarde.")
 
     model = whisper.load_model("base")
