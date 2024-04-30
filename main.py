@@ -20,7 +20,7 @@ def extrair_e_transcrever(filepath, local_salvamento, text_var, btn_abrir, btn_s
         return
 
     arquivoTemporarioAudio = "saida_audio.aac"
-    comando_ffmpeg = ["ffmpeg", "-i", filepath, "-vn", "-ar", "16000", "-ac", "1", "-ab", "32k", arquivoTemporarioAudio]
+    comando_ffmpeg = ["ffmpeg", "-i", filepath, "-vn", "-acodec", "copy", arquivoTemporarioAudio]
     subprocess.run(comando_ffmpeg, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     text_var.set("Desgravando... ⏳ Por favor, aguarde.")
@@ -55,12 +55,7 @@ def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir):
         text_var.set("Seleção de arquivo cancelada. Operação interrompida.")
         return None, None
 
-    # Extrai apenas o nome do arquivo do caminho completo
-    nome_arquivo = os.path.basename(filepath)
-    # Opcional: Remove a extensão do arquivo para obter apenas o título
-    titulo_video = os.path.splitext(nome_arquivo)[0]
-
-    nome_base_arquivo = titulo_video + "_desgravação.docx"
+    nome_base_arquivo = os.path.splitext(os.path.basename(filepath))[0] + "_desgravação.docx"
     diretorio_padrao = os.path.dirname(filepath)
     local_salvamento = filedialog.asksaveasfilename(
         title="Salvar desgravação em:",
@@ -73,8 +68,7 @@ def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir):
         text_var.set("Seleção de local de salvamento cancelada. Operação interrompida.")
         return None, None
 
-    # Atualiza o texto para mostrar apenas o título do vídeo
-    text_var.set(f"Arquivo selecionado: {titulo_video}\n\nSalvar em: {local_salvamento}")
+    text_var.set(f"Arquivo selecionado: {filepath}\nSalvar em: {local_salvamento}")
     btn_select.config(text="Cancelar desgravação", command=lambda: cancelar_desgravacao_fn(btn_select))
     btn_abrir.config(state=tk.DISABLED)  # Desabilita o botão até a transcrição ser concluída
     return filepath, local_salvamento
@@ -113,7 +107,7 @@ frame.pack(expand=True, fill=tk.BOTH, padx=20, pady=20)
 
 # Texto de status
 text_var = tk.StringVar()
-text_var.set("Clique no botão abaixo para iniciar.")
+text_var.set("Selecione um arquivo MP4 para transcrever.")
 text_label = ttk.Label(frame, textvariable=text_var, wraplength=550, style="TLabel")
 text_label.pack()
 
