@@ -10,8 +10,11 @@ import webbrowser
 
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
 
-# Variável global para controle de cancelamento
 cancelar_desgravacao = False
+
+def criar_pasta_tmp():
+    if not os.path.exists("tmp"):
+        os.makedirs("tmp")
 
 def extrair_e_transcrever(filepath, local_salvamento, text_var, btn_abrir, btn_select):
     global cancelar_desgravacao
@@ -19,14 +22,14 @@ def extrair_e_transcrever(filepath, local_salvamento, text_var, btn_abrir, btn_s
         text_var.set("Operação cancelada.")
         return
 
-    arquivoTemporarioAudio = "saida_audio.aac"
+    criar_pasta_tmp()
+    arquivoTemporarioAudio = os.path.join("tmp", "saida_audio.aac")
     comando_ffmpeg = ["ffmpeg", "-i", filepath, "-vn", "-acodec", "copy", arquivoTemporarioAudio]
     subprocess.run(comando_ffmpeg, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     text_var.set("Desgravando... ⏳ Por favor, aguarde.")
 
     model = whisper.load_model("medium")
-    # Simulação de verificação de cancelamento (a implementação real dependeria da tarefa específica)
     if cancelar_desgravacao:
         text_var.set("Desgravação cancelada. Selecione um arquivo para começar.")
         btn_select.config(text="Selecionar Arquivo e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select))
@@ -70,7 +73,7 @@ def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir):
 
     text_var.set(f"Arquivo selecionado: {filepath}\nSalvar em: {local_salvamento}")
     btn_select.config(text="Cancelar desgravação", command=lambda: cancelar_desgravacao_fn(btn_select))
-    btn_abrir.config(state=tk.DISABLED)  # Desabilita o botão até a transcrição ser concluída
+    btn_abrir.config(state=tk.DISABLED)
     return filepath, local_salvamento
 
 def cancelar_desgravacao_fn(btn_select):
@@ -82,30 +85,24 @@ def cancelar_desgravacao_fn(btn_select):
 root = tk.Tk()
 root.title("Transcritor de Áudio Profissional")
 
-# Definindo a resolução inicial da janela
 root.geometry("600x400")
 
-# Configurando o estilo
 style = ttk.Style()
 style.configure("TFrame", background="#f0f0f0")
 style.configure("TButton", background="#0078D7", foreground="black", font=("Arial", 10))
 style.configure("TLabel", background="#f0f0f0", foreground="black", font=("Arial", 12))
 style.configure("Title.TLabel", background="black", foreground="white", font=("Arial", 16, "bold"))
 
-# Frame do título com altura aumentada
-title_frame = ttk.Frame(root, style="TFrame", height=60)  # Altura aumentada para 60
+title_frame = ttk.Frame(root, style="TFrame", height=60)
 title_frame.pack(side=tk.TOP, fill=tk.X)
 title_frame.pack_propagate(False)
 
-# Título
 titulo = ttk.Label(title_frame, text="Transcritor de Áudio", style="Title.TLabel", anchor="center")
 titulo.pack(side=tk.TOP, fill=tk.X)
 
-# Frame principal
 frame = ttk.Frame(root, style="TFrame")
 frame.pack(expand=True, fill=tk.BOTH, padx=20, pady=20)
 
-# Texto de status
 text_var = tk.StringVar()
 text_var.set("Selecione um arquivo MP4 para transcrever.")
 text_label = ttk.Label(frame, textvariable=text_var, wraplength=550, style="TLabel")
@@ -113,7 +110,7 @@ text_label.pack()
 
 btn_abrir = ttk.Button(frame, text="Abrir Documento Transcrito", state=tk.DISABLED, style="TButton")
 btn_abrir.pack(pady=10)
-btn_abrir.pack_forget()  # Inicialmente, o botão fica invisível
+btn_abrir.pack_forget()
 
 btn_select = ttk.Button(frame, text="Selecionar Arquivo e Local de Salvamento", style="TButton")
 btn_select.pack(pady=10)
@@ -122,7 +119,7 @@ def iniciar_processo(btn_abrir, btn_select):
     filepath, local_salvamento = selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir)
     if filepath and local_salvamento:
         iniciar_transcricao_thread(filepath, local_salvamento, text_var, btn_abrir, btn_select)
-        btn_abrir.pack(pady=10)  # Torna o botão visível após iniciar a transcrição
+        btn_abrir.pack(pady=10)
 
 btn_select.config(command=lambda: iniciar_processo(btn_abrir, btn_select))
 
