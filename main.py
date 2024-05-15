@@ -8,7 +8,7 @@ import os
 from docx import Document
 import webbrowser
 
-warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
+warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
 
 cancelar_desgravacao = False
 
@@ -16,82 +16,85 @@ def criar_pasta_tmp():
     if not os.path.exists("tmp"):
         os.makedirs("tmp")
 
-def extrair_e_transcrever(filepath, local_salvamento, text_var, btn_abrir, btn_select):
+def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select):
     global cancelar_desgravacao
-    if not filepath or not local_salvamento:
-        text_var.set("Operação cancelada.")
-        return
-
     criar_pasta_tmp()
-    arquivoTemporarioAudio = os.path.join("tmp", "saida_audio.aac")
-    comando_ffmpeg = ["ffmpeg", "-i", filepath, "-vn", "-acodec", "copy", arquivoTemporarioAudio]
-    subprocess.run(comando_ffmpeg, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
+    for filepath in filepaths:
+        if cancelar_desgravacao:
+            text_var.set("Desgravação cancelada. Selecione arquivos para começar.")
+            btn_select.config(text="Selecionar Arquivos e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select))
+            cancelar_desgravacao = False
+            return
+        
+        nome_arquivo = os.path.splitext(os.path.basename(filepath))[0]
+        local_salvamento = os.path.join(os.path.dirname(filepath), nome_arquivo + "-transcrição.docx")
+        arquivoTemporarioAudio = os.path.join("tmp", nome_arquivo + ".aac")
+        
+        comando_ffmpeg = ["ffmpeg", "-i", filepath, "-vn", "-acodec", "copy", arquivoTemporarioAudio]
+        subprocess.run(comando_ffmpeg, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        text_var.set(f"Desgravando: {nome_arquivo} ⏳ Por favor, aguarde.")
+        
+        model = whisper.load_model("medium")
+        result = model.transcribe(arquivoTemporarioAudio)
+        
+        doc = Document()
+        doc.add_paragraph(result["text"])
+        doc.save(local_salvamento)
+        
+        os.remove(arquivoTemporarioAudio)
+        
+    text_var.set("Todas as transcrições foram concluídas.")
+    btn_select.config(text="Selecionar Arquivos e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select))
+    btn_abrir.config(state=tk.NORMAL, command=lambda: abrir_local_salvamento(filepaths))
 
-    text_var.set("Desgravando... ⏳ Por favor, aguarde.")
+def abrir_local_salvamento(filepaths):
+    if filepaths:
+        # Abre o diretório do primeiro arquivo na lista
+        diretorio = os.path.dirname(filepaths[0])
+        webbrowser.open(diretorio)
 
-    model = whisper.load_model("medium")
-    if cancelar_desgravacao:
-        text_var.set("Desgravação cancelada. Selecione um arquivo para começar.")
-        btn_select.config(text="Selecionar Arquivo e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select))
-        cancelar_desgravacao = False
-        return
-
-    result = model.transcribe(arquivoTemporarioAudio)
-
-    doc = Document()
-    doc.add_paragraph(result["text"])
-    doc.save(local_salvamento)
-
-    text_var.set(f"Transcrição concluída. Documento salvo com sucesso em: {local_salvamento}")
-    btn_abrir.config(command=lambda: webbrowser.open(local_salvamento), state=tk.NORMAL)
-    btn_select.config(text="Selecionar Arquivo e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select))
-
-    os.remove(arquivoTemporarioAudio)
-
-def iniciar_transcricao_thread(filepath, local_salvamento, text_var, btn_abrir, btn_select):
-    Thread(target=lambda: extrair_e_transcrever(filepath, local_salvamento, text_var, btn_abrir, btn_select)).start()
+def iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select):
+    Thread(target=lambda: extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select)).start()
 
 def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir):
     global cancelar_desgravacao
-    filepath = filedialog.askopenfilename(title="Escolher o vídeo que será transcrito para texto", filetypes=[("MP4 files", "*.mp4"), ("MP3 files", "*.mp3")])
-    if not filepath:
+    filepaths = filedialog.askopenfilenames(title="Escolher os vídeos que serão transcritos para texto", filetypes=[("MP4 files", "*.mp4"), ("MP3 files", "*.mp3")])
+    if not filepaths:
         text_var.set("Seleção de arquivo cancelada. Operação interrompida.")
-        return None, None
+        return None
 
-    nome_base_arquivo = os.path.splitext(os.path.basename(filepath))[0] + "_desgravação.docx"
-    diretorio_padrao = os.path.dirname(filepath)
-    local_salvamento = filedialog.asksaveasfilename(
-        title="Salvar desgravação em:",
-        initialdir=diretorio_padrao,
-        initialfile=nome_base_arquivo,
-        defaultextension=".docx",
-        filetypes=[("Documentos Word", "*.docx")]
-    )
-    if not local_salvamento:
-        text_var.set("Seleção de local de salvamento cancelada. Operação interrompida.")
-        return None, None
-
-    text_var.set(f"Arquivo selecionado: {filepath}\nSalvar em: {local_salvamento}")
+    text_var.set(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
     btn_select.config(text="Cancelar desgravação", command=lambda: cancelar_desgravacao_fn(btn_select))
     btn_abrir.config(state=tk.DISABLED)
-    return filepath, local_salvamento
+    return filepaths
 
 def cancelar_desgravacao_fn(btn_select):
     global cancelar_desgravacao
     cancelar_desgravacao = True
-    btn_select.config(text="Selecionar Arquivo e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select))
+    btn_select.config(text="Selecionar Arquivos e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select))
     text_var.set("Cancelamento em processo...")
 
 root = tk.Tk()
-root.title("Transcritor de Áudio Profissional")
+root.title("Desgravador [ Beta ]")
 
-root.geometry("600x400")
+root.geometry("650x450")
+
+# Definição das cores e estilos
+cor_fundo = "#343a40"
+root.configure(bg=cor_fundo)
 
 style = ttk.Style()
-style.configure("TFrame", background="#f0f0f0")
-style.configure("TButton", background="#0078D7", foreground="black", font=("Arial", 10))
-style.configure("TLabel", background="#f0f0f0", foreground="black", font=("Arial", 12))
-style.configure("Title.TLabel", background="black", foreground="white", font=("Arial", 16, "bold"))
+style.theme_use('clam')
+
+cor_frente = "#f8f9fa"
+cor_acento = "#007bff"
+
+style.configure("TFrame", background=cor_fundo)
+style.configure("TButton", background=cor_acento, foreground=cor_frente, font=("Arial", 10, "bold"), borderwidth=1)
+style.configure("TLabel", background=cor_fundo, foreground=cor_frente, font=("Arial", 12))
+style.configure("Title.TLabel", background=cor_fundo, foreground=cor_frente, font=("Arial", 16, "bold"))
 
 title_frame = ttk.Frame(root, style="TFrame", height=60)
 title_frame.pack(side=tk.TOP, fill=tk.X)
@@ -104,23 +107,20 @@ frame = ttk.Frame(root, style="TFrame")
 frame.pack(expand=True, fill=tk.BOTH, padx=20, pady=20)
 
 text_var = tk.StringVar()
-text_var.set("Selecione um arquivo MP4 para transcrever.")
+text_var.set("Selecione os arquivos MP4 para transcrever.")
 text_label = ttk.Label(frame, textvariable=text_var, wraplength=550, style="TLabel")
 text_label.pack()
 
-btn_abrir = ttk.Button(frame, text="Abrir Documento Transcrito", state=tk.DISABLED, style="TButton")
-btn_abrir.pack(pady=10)
-btn_abrir.pack_forget()
-
-btn_select = ttk.Button(frame, text="Selecionar Arquivo e Local de Salvamento", style="TButton")
-btn_select.pack(pady=10)
+btn_abrir = ttk.Button(frame, text="Abrir Pasta de Documentos Transcritos", state=tk.DISABLED, style="TButton")
+btn_select = ttk.Button(frame, text="Selecionar Arquivos e Local de Salvamento", style="TButton")
 
 def iniciar_processo(btn_abrir, btn_select):
-    filepath, local_salvamento = selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir)
-    if filepath and local_salvamento:
-        iniciar_transcricao_thread(filepath, local_salvamento, text_var, btn_abrir, btn_select)
-        btn_abrir.pack(pady=10)
+    filepaths = selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir)
+    if filepaths:
+        iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select)
 
 btn_select.config(command=lambda: iniciar_processo(btn_abrir, btn_select))
+btn_select.pack(pady=(10, 0))
+btn_abrir.pack(pady=(10, 20))
 
 root.mainloop()
