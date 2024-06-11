@@ -7,6 +7,8 @@ import warnings
 import os
 from docx import Document
 import webbrowser
+from plyer import notification
+import winsound
 
 warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
 
@@ -15,6 +17,17 @@ cancelar_desgravacao = False
 def criar_pasta_tmp():
     if not os.path.exists("tmp"):
         os.makedirs("tmp")
+    else:
+        # Apaga todos os arquivos dentro da pasta tmp
+        for filename in os.listdir("tmp"):
+            file_path = os.path.join("tmp", filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    os.rmdir(file_path)
+            except Exception as e:
+                print(f"Falha ao deletar {file_path}. Motivo: {e}")
 
 def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select):
     global cancelar_desgravacao
@@ -36,11 +49,16 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select):
         
         text_var.set(f"Desgravando: {nome_arquivo} ⏳ Por favor, aguarde.")
         
-        model = whisper.load_model("medium")
+        model = whisper.load_model("large")
         result = model.transcribe(arquivoTemporarioAudio)
         
         doc = Document()
-        doc.add_paragraph(result["text"])
+        
+        # Adiciona a transcrição sem formatação de tempo e falante
+        for segment in result["segments"]:
+            text = segment["text"]
+            doc.add_paragraph(text)
+        
         doc.save(local_salvamento)
         
         os.remove(arquivoTemporarioAudio)
@@ -48,10 +66,17 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select):
     text_var.set("Todas as transcrições foram concluídas.")
     btn_select.config(text="Selecionar Arquivos e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select))
     btn_abrir.config(state=tk.NORMAL, command=lambda: abrir_local_salvamento(filepaths))
+    
+    # Exibir notificação e tocar som
+    notification.notify(
+        title="Transcrição Concluída",
+        message="Todas as transcrições foram concluídas com sucesso.",
+        timeout=10
+    )
+    winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
 
 def abrir_local_salvamento(filepaths):
     if filepaths:
-        # Abre o diretório do primeiro arquivo na lista
         diretorio = os.path.dirname(filepaths[0])
         webbrowser.open(diretorio)
 
@@ -81,7 +106,6 @@ root.title("Desgravador [ Beta ]")
 
 root.geometry("650x450")
 
-# Definição das cores e estilos
 cor_fundo = "#343a40"
 root.configure(bg=cor_fundo)
 
