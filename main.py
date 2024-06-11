@@ -18,7 +18,6 @@ def criar_pasta_tmp():
     if not os.path.exists("tmp"):
         os.makedirs("tmp")
     else:
-        # Apaga todos os arquivos dentro da pasta tmp
         for filename in os.listdir("tmp"):
             file_path = os.path.join("tmp", filename)
             try:
@@ -54,7 +53,6 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select):
         
         doc = Document()
         
-        # Adiciona a transcrição sem formatação de tempo e falante
         for segment in result["segments"]:
             text = segment["text"]
             doc.add_paragraph(text)
@@ -67,7 +65,6 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select):
     btn_select.config(text="Selecionar Arquivos e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select))
     btn_abrir.config(state=tk.NORMAL, command=lambda: abrir_local_salvamento(filepaths))
     
-    # Exibir notificação e tocar som
     notification.notify(
         title="Transcrição Concluída",
         message="Todas as transcrições foram concluídas com sucesso.",
