@@ -1,13 +1,11 @@
 import tkinter as tk
 from tkinter import filedialog, ttk
-import whisper
+import subprocess
 from threading import Thread
 import warnings
 import os
 from docx import Document
 import webbrowser
-from plyer import notification
-import winsound
 
 warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
 
@@ -16,23 +14,10 @@ cancelar_desgravacao = False
 def criar_pasta_tmp():
     if not os.path.exists("tmp"):
         os.makedirs("tmp")
-    else:
-        # Apaga todos os arquivos dentro da pasta tmp
-        for filename in os.listdir("tmp"):
-            file_path = os.path.join("tmp", filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    os.rmdir(file_path)
-            except Exception as e:
-                print(f"Falha ao deletar {file_path}. Motivo: {e}")
 
 def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select):
     global cancelar_desgravacao
     criar_pasta_tmp()
-    
-    model = whisper.load_model("large")
     
     for filepath in filepaths:
         if cancelar_desgravacao:
@@ -43,44 +28,32 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select):
         
         nome_arquivo = os.path.splitext(os.path.basename(filepath))[0]
         local_salvamento = os.path.join(os.path.dirname(filepath), nome_arquivo + "-transcrição.docx")
+        arquivoTemporarioAudio = os.path.join("tmp", nome_arquivo + ".aac")
         
-        try:
-            text_var.set(f"Desgravando: {nome_arquivo} ⏳ Por favor, aguarde.")
-            
-            # Transcreve diretamente o arquivo de vídeo/áudio
-            result = model.transcribe(filepath)
-            
-            doc = Document()
-            
-            # Adiciona a transcrição sem formatação de tempo e falante
-            for segment in result["segments"]:
-                text = segment["text"]
-                doc.add_paragraph(text)
-            
-            doc.save(local_salvamento)
+        comando_ffmpeg = ["ffmpeg", "-i", filepath, "-vn", "-acodec", "copy", arquivoTemporarioAudio]
+        subprocess.run(comando_ffmpeg, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
-        except Exception as e:
-            text_var.set(f"Erro ao desgravando {nome_arquivo}. Motivo: {e}")
-            cancelar_desgravacao = True
-            btn_select.config(text="Selecionar Arquivos e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select))
-            notification.notify(
-                title="Erro na Transcrição",
-                message=f"Ocorreu um erro ao transcrever {nome_arquivo}.",
-                timeout=10
-            )
-            winsound.MessageBeep(winsound.MB_ICONHAND)
-            return
+        text_var.set(f"Desgravando: {nome_arquivo} ⏳ Por favor, aguarde.")
+        
+        # Use o comando whisper para transcrever o áudio
+        comando_whisper = ["whisper", arquivoTemporarioAudio, "--model", "large", "--output_format", "txt", "--output_dir", "tmp"]
+        subprocess.run(comando_whisper, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        # Leia o arquivo de transcrição gerado pelo whisper
+        transcricao_path = os.path.join("tmp", nome_arquivo + ".txt")
+        with open(transcricao_path, "r", encoding="utf-8") as f:
+            transcricao_texto = f.read()
+        
+        doc = Document()
+        doc.add_paragraph(transcricao_texto)
+        doc.save(local_salvamento)
+        
+        os.remove(arquivoTemporarioAudio)
+        os.remove(transcricao_path)
         
     text_var.set("Todas as transcrições foram concluídas.")
     btn_select.config(text="Selecionar Arquivos e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select))
     btn_abrir.config(state=tk.NORMAL, command=lambda: abrir_local_salvamento(filepaths))
-    
-    notification.notify(
-        title="Transcrição Concluída",
-        message="Todas as transcrições foram concluídas com sucesso.",
-        timeout=10
-    )
-    winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
 
 def abrir_local_salvamento(filepaths):
     if filepaths:
