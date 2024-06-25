@@ -1,27 +1,27 @@
-# main.spec
-
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_all
 
-block_cipher = None
+datas = []
+binaries = []
+hiddenimports = ['whisper']
+tmp_ret = collect_all('whisper')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+
 
 a = Analysis(
     ['main.py'],
-    pathex=['C:\\Users\\lfmdsantos\\Desktop\\pyfiles'],
-    binaries=[],
-    datas=[
-        ('C:\\Users\\lfmdsantos\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\whisper', 'whisper'),
-        ('C:\\Users\\lfmdsantos\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\plyer', 'plyer')
-
-    ],
-    hiddenimports=['plyer.platforms','plyer'],
+    pathex=[],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
+    hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
+    noarchive=False,
+    optimize=0,
 )
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
@@ -33,14 +33,17 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=True,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=['bin\\icon.ico'],
 )
 coll = COLLECT(
     exe,
     a.binaries,
-    a.zipfiles,
     a.datas,
     strip=False,
     upx=True,

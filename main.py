@@ -8,37 +8,34 @@ from docx import Document
 import webbrowser
 from plyer import notification
 import winsound
+import logging
 
 warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
 
-cancelar_desgravacao = False
 
-def criar_pasta_tmp():
-    if not os.path.exists("tmp"):
-        os.makedirs("tmp")
-    else:
-        # Apaga todos os arquivos dentro da pasta tmp
-        for filename in os.listdir("tmp"):
-            file_path = os.path.join("tmp", filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    os.rmdir(file_path)
-            except Exception as e:
-                print(f"Falha ao deletar {file_path}. Motivo: {e}")
+def configurar_logger():
+    if not os.path.exists("logs"):
+        os.makedirs("logs")
+    logging.basicConfig(filename='logs/info.log', level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
+
+configurar_logger()
+
+cancelar_desgravacao = False
 
 def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select):
     global cancelar_desgravacao
-    criar_pasta_tmp()
     
     model = whisper.load_model("large")
-    
+
     for filepath in filepaths:
+        text_var.set("Processando arquivos...")
+
         if cancelar_desgravacao:
             text_var.set("Desgravação cancelada. Selecione arquivos para começar.")
             btn_select.config(text="Selecionar Arquivos e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select))
             cancelar_desgravacao = False
+            logging.info("Desgravação cancelada pelo usuário.")
             return
         
         nome_arquivo = os.path.splitext(os.path.basename(filepath))[0]
@@ -46,22 +43,23 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select):
         
         try:
             text_var.set(f"Desgravando: {nome_arquivo} ⏳ Por favor, aguarde.")
+            logging.info(f"Iniciando transcrição do arquivo: {filepath}")
             
-            # Transcreve diretamente o arquivo de vídeo/áudio
             result = model.transcribe(filepath)
             
             doc = Document()
             
-            # Adiciona a transcrição sem formatação de tempo e falante
             for segment in result["segments"]:
                 text = segment["text"]
                 doc.add_paragraph(text)
             
             doc.save(local_salvamento)
+            logging.info(f"Transcrição concluída e salva em: {local_salvamento}")
         
         except Exception as e:
-            text_var.set(f"Erro ao desgravando {nome_arquivo}. Motivo: {e}")
+            logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {e}")
             cancelar_desgravacao = True
+            text_var.set(f"Erro no desgravando {nome_arquivo}. Motivo: {e}")
             btn_select.config(text="Selecionar Arquivos e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select))
             notification.notify(
                 title="Erro na Transcrição",
@@ -75,6 +73,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select):
     btn_select.config(text="Selecionar Arquivos e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select))
     btn_abrir.config(state=tk.NORMAL, command=lambda: abrir_local_salvamento(filepaths))
     
+    logging.info("Todas as transcrições foram concluídas com sucesso.")
     notification.notify(
         title="Transcrição Concluída",
         message="Todas as transcrições foram concluídas com sucesso.",
@@ -86,6 +85,7 @@ def abrir_local_salvamento(filepaths):
     if filepaths:
         diretorio = os.path.dirname(filepaths[0])
         webbrowser.open(diretorio)
+        logging.info(f"Abrindo diretório de salvamento: {diretorio}")
 
 def iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select):
     Thread(target=lambda: extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select)).start()
@@ -95,11 +95,13 @@ def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir):
     filepaths = filedialog.askopenfilenames(title="Escolher os vídeos que serão transcritos para texto", filetypes=[("MP4 files", "*.mp4"), ("MP3 files", "*.mp3")])
     if not filepaths:
         text_var.set("Seleção de arquivo cancelada. Operação interrompida.")
+        logging.info("Seleção de arquivo cancelada pelo usuário.")
         return None
 
     text_var.set(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
     btn_select.config(text="Cancelar desgravação", command=lambda: cancelar_desgravacao_fn(btn_select))
     btn_abrir.config(state=tk.DISABLED)
+    logging.info(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
     return filepaths
 
 def cancelar_desgravacao_fn(btn_select):
@@ -107,6 +109,7 @@ def cancelar_desgravacao_fn(btn_select):
     cancelar_desgravacao = True
     btn_select.config(text="Selecionar Arquivos e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select))
     text_var.set("Cancelamento em processo...")
+    logging.info("Processo de desgravação cancelado pelo usuário.")
 
 root = tk.Tk()
 root.title("Desgravador [ Beta ]")
@@ -127,12 +130,12 @@ style.configure("TButton", background=cor_acento, foreground=cor_frente, font=("
 style.configure("TLabel", background=cor_fundo, foreground=cor_frente, font=("Arial", 12))
 style.configure("Title.TLabel", background=cor_fundo, foreground=cor_frente, font=("Arial", 16, "bold"))
 
-title_frame = ttk.Frame(root, style="TFrame", height=60)
+title_frame = ttk.Frame(root, style="TFrame", height=70)
 title_frame.pack(side=tk.TOP, fill=tk.X)
 title_frame.pack_propagate(False)
 
 titulo = ttk.Label(title_frame, text="Transcritor de Áudio", style="Title.TLabel", anchor="center")
-titulo.pack(side=tk.TOP, fill=tk.X)
+titulo.pack(side=tk.TOP, fill=tk.X,pady=20)
 
 frame = ttk.Frame(root, style="TFrame")
 frame.pack(expand=True, fill=tk.BOTH, padx=20, pady=20)

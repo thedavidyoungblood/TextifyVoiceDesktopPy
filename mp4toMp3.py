@@ -40,7 +40,6 @@ root.title("Conversor MP4 para MP3")
 
 root.geometry("650x450")
 
-# Definição das cores e estilos
 cor_fundo = "#343a40"
 root.configure(bg=cor_fundo)
 
