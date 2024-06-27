@@ -39,7 +39,8 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
     try:
         logging.info(f"Tentando carregar o modelo do caminho: {model_path}")
         model = whisper.load_model(model_path)
-        logging.info(f"Modelo transcrição:{model}. Modelos disponíveis {whisper.available_models()}")
+        if model:
+            logging.info("Modelo transcrição carregado com sucesso")
     except Exception as e:
         logging.error(f"Erro ao carregar o modelo de transcrição: {e}")
         text_var.set(f"Erro ao carregar o modelo. Verifique o caminho.")
