@@ -12,12 +12,14 @@ import logging
 import json
 
 warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
+warnings.filterwarnings("ignore", category=UserWarning, message="FP16 is not supported on CPU; using FP32 instead")
 
 CONFIG_FILE = "config.json"
 config = {}
 try:
     with open(CONFIG_FILE, 'r') as f:
         config = json.load(f)
+
 except FileNotFoundError:
     pass
 
@@ -35,12 +37,16 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
     global cancelar_desgravacao
 
     try:
+        logging.info(f"Tentando carregar o modelo do caminho: {model_path}")
         model = whisper.load_model(model_path)
-        logging.info(f"Modelo transcrição:{model}")
+        logging.info(f"Modelo transcrição:{model}. Modelos disponíveis {whisper.available_models()}")
     except Exception as e:
         logging.error(f"Erro ao carregar o modelo de transcrição: {e}")
         text_var.set(f"Erro ao carregar o modelo. Verifique o caminho.")
         return
+
+
+    options = whisper.DecodingOptions(language="pt")
 
     for filepath in filepaths:
         logging.info(f"Analisando arquivo: {filepath}")
@@ -50,7 +56,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
             text_var.set("Desgravação cancelada. Selecione arquivos para começar.")
             btn_select.config(text="Selecionar Arquivos e Local de Salvamento",
                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
-            btn_modelo.config(state=tk.NORMAL)  # Reativa o botão de modelo
+            btn_modelo.config(state=tk.NORMAL)
             cancelar_desgravacao = False
             logging.info("Desgravação cancelada pelo usuário.")
             return
@@ -77,9 +83,9 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
             logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {e}")
             cancelar_desgravacao = True
             text_var.set(f"Erro no desgravando {nome_arquivo}. Motivo: {e}")
-            btn_select.config(text="Selecionar Arquivos e Local de Salvamento",
+            btn_select.config(text="Selecionar Arquivos para transcrição",
                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
-            btn_modelo.config(state=tk.NORMAL)  # Reativa o botão de modelo
+            btn_modelo.config(state=tk.NORMAL)
             notification.notify(
                 title="Erro na Transcrição",
                 message=f"Ocorreu um erro ao transcrever {nome_arquivo}.",
@@ -91,7 +97,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
     text_var.set("Todas as transcrições foram concluídas.")
     btn_select.config(text="Selecionar Arquivos e Local de Salvamento",
                      command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
-    btn_modelo.config(state=tk.NORMAL)  # Reativa o botão de modelo
+    btn_modelo.config(state=tk.NORMAL)
     btn_abrir.config(state=tk.NORMAL, command=lambda: abrir_local_salvamento(filepaths))
 
     logging.info("Todas as transcrições foram concluídas com sucesso.")
@@ -122,7 +128,7 @@ def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, mod
 
     text_var.set(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
     btn_select.config(text="Cancelar desgravação", command=lambda: cancelar_desgravacao_fn(btn_select, btn_modelo))
-    btn_modelo.config(state=tk.DISABLED)  # Desativa o botão de modelo durante a transcrição
+    btn_modelo.config(state=tk.DISABLED)
     btn_abrir.config(state=tk.DISABLED)
     logging.info(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
     return filepaths
@@ -131,7 +137,7 @@ def cancelar_desgravacao_fn(btn_select, btn_modelo):
     global cancelar_desgravacao
     cancelar_desgravacao = True
     btn_select.config(text="Selecionar Arquivos e Local de Salvamento",command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
-    btn_modelo.config(state=tk.NORMAL)  # Reativa o botão de modelo
+    btn_modelo.config(state=tk.NORMAL)
     text_var.set("Cancelamento em processo...")
     logging.info("Processo de desgravação cancelado pelo usuário.")
 
@@ -140,6 +146,7 @@ def selecionar_modelo():
     filepath = filedialog.askopenfilename(title="Selecionar Modelo Whisper",filetypes=[("Modelo Whisper", "*.pt;*.bin")])
     if filepath:
         config['model_path'] = filepath
+        logging.info(f"Caminho do modelo configurado para {config['model_path']}")
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f)
         model_path_var.set(filepath)
@@ -150,6 +157,8 @@ root.title("Desgravador [ Beta ]")
 
 root.geometry("650x500")
 
+root.iconbitmap('./bin/icon.ico')
+
 cor_fundo = "#343a40"
 root.configure(bg=cor_fundo)
 
@@ -158,12 +167,12 @@ style.theme_use('clam')
 
 cor_frente = "#f8f9fa"
 cor_acento = "#007bff"
-cor_modelo = "#28a745"  # Cor verde para o botão de modelo
+cor_modelo = "#28a745"
 
 style.configure("TFrame", background=cor_fundo)
 style.configure("TButton", background=cor_acento, foreground=cor_frente, font=("Arial", 10, "bold"), borderwidth=1)
 style.configure("Modelo.TButton", background=cor_modelo, foreground=cor_frente, font=("Arial", 10, "bold"),
-                borderwidth=1)  # Estilo para o botão de modelo
+                borderwidth=1)
 style.configure("TLabel", background=cor_fundo, foreground=cor_frente, font=("Arial", 12))
 style.configure("Title.TLabel", background=cor_fundo, foreground=cor_frente, font=("Arial", 16, "bold"))
 
@@ -182,13 +191,12 @@ text_var.set("Selecione os arquivos MP4 para transcrever.")
 text_label = ttk.Label(frame, textvariable=text_var, wraplength=550, style="TLabel")
 text_label.pack()
 
-# Carregar caminho do modelo das configurações ou definir um padrão
 model_path = config.get('model_path')
 model_path_var = tk.StringVar(value=model_path)
 
 btn_abrir = ttk.Button(frame, text="Abrir Pasta de Documentos Transcritos", state=tk.DISABLED, style="TButton")
 btn_select = ttk.Button(frame, text="Selecionar Arquivos e Local de Salvamento", style="TButton")
-btn_modelo = ttk.Button(frame, text="Selecionar qualidade", command=selecionar_modelo, style="Modelo.TButton") # Aplica o estilo ao botão
+btn_modelo = ttk.Button(frame, text="Selecionar qualidade", command=selecionar_modelo, style="Modelo.TButton")
 model_path_label = ttk.Label(frame, textvariable=model_path_var, wraplength=550, style="TLabel")
 
 def iniciar_processo(btn_abrir, btn_select, btn_modelo):

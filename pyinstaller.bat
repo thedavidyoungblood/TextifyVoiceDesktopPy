@@ -3,7 +3,7 @@
 
 echo "Iniciando o processo de build com PyInstaller..."
 
-pyinstaller --windowed --hidden-import=whisper --collect-all=whisper --icon=./bin/icon.ico main.py
+pyinstaller --windowed --hidden-import=whisper --hidden-import=whisper --collect-all=plyer --collect-all=plyer --icon=./bin/icon.ico main.py
 
 # Verifica se o comando foi bem-sucedido
 if [ $? -eq 0 ]; then
