@@ -1,6 +1,6 @@
 dist
 build
 main.spec
-config
 logs
 model
+config.json

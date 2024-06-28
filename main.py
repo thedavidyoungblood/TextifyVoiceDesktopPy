@@ -47,7 +47,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
         return
 
 
-    options = whisper.DecodingOptions(language="pt")
+    #options = whisper.DecodingOptions(language="pt")
 
     for filepath in filepaths:
         logging.info(f"Analisando arquivo: {filepath}")
