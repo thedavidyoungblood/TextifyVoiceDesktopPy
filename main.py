@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, ttk, messagebox
 import whisper
 from threading import Thread
 import warnings
@@ -19,7 +19,6 @@ config = {}
 try:
     with open(CONFIG_FILE, 'r') as f:
         config = json.load(f)
-
 except FileNotFoundError:
     pass
 
@@ -46,8 +45,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
         text_var.set(f"Erro ao carregar o modelo. Verifique o caminho.")
         return
 
-
-    #options = whisper.DecodingOptions(language="pt")
+    # options = whisper.DecodingOptions(language="pt")
 
     for filepath in filepaths:
         logging.info(f"Analisando arquivo: {filepath}")
@@ -142,16 +140,55 @@ def cancelar_desgravacao_fn(btn_select, btn_modelo):
     text_var.set("Cancelamento em processo...")
     logging.info("Processo de desgravação cancelado pelo usuário.")
 
-def selecionar_modelo():
-    global config
-    filepath = filedialog.askopenfilename(title="Selecionar Modelo Whisper",filetypes=[("Modelo Whisper", "*.pt;*.bin")])
-    if filepath:
-        config['model_path'] = filepath
-        logging.info(f"Caminho do modelo configurado para {config['model_path']}")
+def verificar_modelo(model_path, janela_modelo, model_path_var):
+    try:
+        whisper.load_model(model_path)
+        messagebox.showinfo("Sucesso", "Modelo carregado com sucesso!")
+        config['model_path'] = model_path
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f)
-        model_path_var.set(filepath)
-        logging.info(f"Caminho do modelo atualizado: {filepath}")
+        model_path_var.set(model_path)
+        janela_modelo.destroy()
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao carregar o modelo: {e}")
+
+def selecionar_modelo():
+    janela_modelo = tk.Toplevel()
+    janela_modelo.title("Selecionar Modelo Whisper")
+    janela_modelo.geometry("400x200")
+    janela_modelo.grab_set()  # Bloqueia a janela principal
+
+    label = ttk.Label(janela_modelo, text="Selecione o caminho do modelo:")
+    label.pack(pady=10)
+
+    model_path_var_local = tk.StringVar(value=config.get('model_path', ''))
+
+    entry = ttk.Entry(janela_modelo, textvariable=model_path_var_local, width=50)
+    entry.pack(pady=10)
+
+    def escolher_modelo():
+        filepath = filedialog.askopenfilename(title="Selecionar Modelo Whisper", filetypes=[("Modelo Whisper", "*.pt;*.bin")])
+        if filepath:
+            model_path_var_local.set(filepath)
+
+    btn_escolher = ttk.Button(janela_modelo, text="Escolher Modelo", command=escolher_modelo)
+    btn_escolher.pack(pady=10)
+
+    btn_verificar = ttk.Button(janela_modelo, text="Verificar Modelo", command=lambda: verificar_modelo(model_path_var_local.get(), janela_modelo, model_path_var))
+    btn_verificar.pack(pady=10)
+
+def verificar_modelo_inicial():
+    model_path = config.get('model_path')
+    if model_path:
+        try:
+            whisper.load_model(model_path)
+            logging.info("Modelo inicial carregado com sucesso.")
+        except Exception as e:
+            logging.error(f"Erro ao carregar o modelo inicial: {e}")
+            messagebox.showerror("Erro", f"Erro ao carregar o modelo inicial: {e}")
+            selecionar_modelo()
+    else:
+        selecionar_modelo()
 
 root = tk.Tk()
 root.title("Desgravador [ Beta ]")
@@ -198,7 +235,6 @@ model_path_var = tk.StringVar(value=model_path)
 btn_abrir = ttk.Button(frame, text="Abrir Pasta de Documentos Transcritos", state=tk.DISABLED, style="TButton")
 btn_select = ttk.Button(frame, text="Selecionar Arquivos e Local de Salvamento", style="TButton")
 btn_modelo = ttk.Button(frame, text="Selecionar qualidade", command=selecionar_modelo, style="Modelo.TButton")
-model_path_label = ttk.Label(frame, textvariable=model_path_var, wraplength=550, style="TLabel")
 
 def iniciar_processo(btn_abrir, btn_select, btn_modelo):
     filepaths = selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, model_path_var.get())
@@ -209,6 +245,8 @@ btn_select.config(command=lambda: iniciar_processo(btn_abrir, btn_select, btn_mo
 btn_select.pack(pady=(10, 0))
 btn_abrir.pack(pady=(10, 20))
 btn_modelo.pack(pady=(10, 0))
-model_path_label.pack()
+
+# Verificar modelo ao iniciar a aplicação
+root.after(100, verificar_modelo_inicial)
 
 root.mainloop()
