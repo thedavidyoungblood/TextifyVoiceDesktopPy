@@ -3,5 +3,5 @@ build
 main.spec
 logs
 model
-config.json
 textify
+main.spec

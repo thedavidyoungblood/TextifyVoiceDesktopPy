@@ -62,21 +62,20 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
 
         nome_arquivo = os.path.splitext(os.path.basename(filepath))[0]
         local_salvamento = os.path.join(os.path.dirname(filepath), nome_arquivo + "-transcrição.docx")
+        logging.info(f"Transcrição será salvar em: {local_salvamento}")
 
         try:
             text_var.set(f"Desgravando: {nome_arquivo} ⏳ Por favor, aguarde.")
             logging.info(f"Iniciando transcrição do arquivo: {filepath}")
 
             result = model.transcribe(filepath)
-
             doc = Document()
-
             for segment in result["segments"]:
                 text = segment["text"]
                 doc.add_paragraph(text)
 
             doc.save(local_salvamento)
-            logging.info(f"Transcrição concluída e salva em: {local_salvamento}")
+            logging.info(f"Transcrição concluída salva em: {local_salvamento}")
 
         except Exception as e:
             logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {e}")
@@ -156,7 +155,7 @@ def selecionar_modelo():
     janela_modelo = tk.Toplevel()
     janela_modelo.title("Selecionar Modelo Whisper")
     janela_modelo.geometry("400x200")
-    janela_modelo.grab_set()  # Bloqueia a janela principal
+    janela_modelo.grab_set()
 
     label = ttk.Label(janela_modelo, text="Selecione o caminho do modelo:")
     label.pack(pady=10)
@@ -246,7 +245,6 @@ btn_select.pack(pady=(10, 0))
 btn_abrir.pack(pady=(10, 20))
 btn_modelo.pack(pady=(10, 0))
 
-# Verificar modelo ao iniciar a aplicação
 root.after(100, verificar_modelo_inicial)
 
 root.mainloop()
