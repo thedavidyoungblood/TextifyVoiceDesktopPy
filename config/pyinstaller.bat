@@ -4,13 +4,13 @@
 echo "Iniciando o processo de build com PyInstaller..."
 
 pyinstaller --windowed --hidden-import=whisper --hidden-import=whisper --collect-all=plyer --collect-all=plyer --icon=./bin/icon.ico main.py
+pyinstaller --windowed --no --hidden-import=whisper --icon=./bin/icon.ico main.py
+pyinstaller --add-data "path/to/icon.ico;./bin" --add-data "path/to/config.json;." your_script.py
 
-# Verifica se o comando foi bem-sucedido
 if [ $? -eq 0 ]; then
     echo "Build concluído com sucesso!"
 else
     echo "Ocorreu um erro durante o build."
 fi
 
-# Aguarda o usuário pressionar uma tecla antes de fechar o terminal
 read -p "Pressione qualquer tecla para continuar..."

@@ -1,15 +1,16 @@
-import tkinter as tk
-from tkinter import filedialog, ttk, messagebox
-import whisper
-from threading import Thread
-import warnings
 import os
+import logging
 from docx import Document
-import webbrowser
+import tkinter as tk
 from plyer import notification
 import winsound
-import logging
+import whisper
+from threading import Thread
+import webbrowser
+from tkinter import filedialog, messagebox, ttk
 import json
+from moviepy.editor import VideoFileClip
+import warnings
 
 warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
 warnings.filterwarnings("ignore", category=UserWarning, message="FP16 is not supported on CPU; using FP32 instead")
@@ -32,6 +33,18 @@ configurar_logger()
 
 cancelar_desgravacao = False
 
+def extrair_audio(filepath, output_path):
+    try:
+        video = VideoFileClip(filepath)
+        if video.audio is None:
+            raise ValueError(f"O arquivo {filepath} não contém uma faixa de áudio.")
+        audio = video.audio
+        audio.write_audiofile(output_path, codec='pcm_s16le')
+        logging.info(f"Áudio extraído com sucesso para: {output_path}")
+    except Exception as e:
+        logging.error(f"Erro ao extrair áudio com moviepy: {e}")
+        raise
+
 def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path):
     global cancelar_desgravacao
 
@@ -39,36 +52,48 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
         logging.info(f"Tentando carregar o modelo do caminho: {model_path}")
         model = whisper.load_model(model_path)
         if model:
-            logging.info("Modelo transcrição carregado com sucesso")
+            logging.info(f"Modelo de transcrição carregado com sucesso: {model}")
     except Exception as e:
         logging.error(f"Erro ao carregar o modelo de transcrição: {e}")
         text_var.set(f"Erro ao carregar o modelo. Verifique o caminho.")
         return
 
-    # options = whisper.DecodingOptions(language="pt")
+    temp_dir = "./temp"
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
+        logging.info(f"Diretório temporário criado: {temp_dir}")
 
     for filepath in filepaths:
+        filepath = filepath.replace("/", "\\")  # Garantir barra invertida
         logging.info(f"Analisando arquivo: {filepath}")
         text_var.set("Processando arquivos...")
 
         if cancelar_desgravacao:
             text_var.set("Desgravação cancelada. Selecione arquivos para começar.")
             btn_select.config(text="Selecionar Arquivos e Local de Salvamento",
-                             command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
             btn_modelo.config(state=tk.NORMAL)
             cancelar_desgravacao = False
             logging.info("Desgravação cancelada pelo usuário.")
             return
 
         nome_arquivo = os.path.splitext(os.path.basename(filepath))[0]
-        local_salvamento = os.path.join(os.path.dirname(filepath), nome_arquivo + "-transcrição.docx")
-        logging.info(f"Transcrição será salvar em: {local_salvamento}")
+        local_salvamento = os.path.join(os.path.dirname(filepath), nome_arquivo + "_text.docx")
+        local_salvamento = local_salvamento.replace("/", "\\")  # Garantir barra invertida
+        logging.info(f"Transcrição será salva em: {local_salvamento}")
 
         try:
-            text_var.set(f"Desgravando: {nome_arquivo} ⏳ Por favor, aguarde.")
-            logging.info(f"Iniciando transcrição do arquivo: {filepath}")
+            if not os.path.exists(filepath):
+                raise FileNotFoundError(f"O arquivo {filepath} não foi encontrado.")
 
-            result = model.transcribe(filepath)
+            # Extrair áudio do vídeo
+            audio_temp_path = os.path.join(temp_dir, nome_arquivo + "_audio.wav")
+            extrair_audio(filepath, audio_temp_path)
+
+            text_var.set(f"Desgravando: {nome_arquivo} ⏳ Por favor, aguarde.")
+            logging.info(f"Iniciando transcrição do arquivo: {audio_temp_path}")
+
+            result = model.transcribe(audio_temp_path)
             doc = Document()
             for segment in result["segments"]:
                 text = segment["text"]
@@ -77,12 +102,60 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
             doc.save(local_salvamento)
             logging.info(f"Transcrição concluída salva em: {local_salvamento}")
 
+            # Remover arquivo de áudio temporário
+            os.remove(audio_temp_path)
+
+        except FileNotFoundError as fnf_error:
+            logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {fnf_error}")
+            cancelar_desgravacao = True
+            text_var.set(f"Erro no desgravando {nome_arquivo}. Motivo: {fnf_error}")
+            btn_select.config(text="Selecionar Arquivos para transcrição",
+                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+            btn_modelo.config(state=tk.NORMAL)
+            notification.notify(
+                title="Erro na Transcrição",
+                message=f"O arquivo {filepath} não foi encontrado.",
+                timeout=10
+            )
+            winsound.MessageBeep(winsound.MB_ICONHAND)
+            return
+
+        except PermissionError as perm_error:
+            logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {perm_error}")
+            cancelar_desgravacao = True
+            text_var.set(f"Erro no desgravando {nome_arquivo}. Motivo: {perm_error}")
+            btn_select.config(text="Selecionar Arquivos para transcrição",
+                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+            btn_modelo.config(state=tk.NORMAL)
+            notification.notify(
+                title="Erro na Transcrição",
+                message=f"Permissão negada para acessar o arquivo {filepath}.",
+                timeout=10
+            )
+            winsound.MessageBeep(winsound.MB_ICONHAND)
+            return
+
+        except ValueError as val_error:
+            logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {val_error}")
+            cancelar_desgravacao = True
+            text_var.set(f"Erro no desgravando {nome_arquivo}. Motivo: {val_error}")
+            btn_select.config(text="Selecionar Arquivos para transcrição",
+                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+            btn_modelo.config(state=tk.NORMAL)
+            notification.notify(
+                title="Erro na Transcrição",
+                message=f"O arquivo {filepath} não contém uma faixa de áudio.",
+                timeout=10
+            )
+            winsound.MessageBeep(winsound.MB_ICONHAND)
+            return
+
         except Exception as e:
             logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {e}")
             cancelar_desgravacao = True
             text_var.set(f"Erro no desgravando {nome_arquivo}. Motivo: {e}")
             btn_select.config(text="Selecionar Arquivos para transcrição",
-                             command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
             btn_modelo.config(state=tk.NORMAL)
             notification.notify(
                 title="Erro na Transcrição",
@@ -94,7 +167,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
 
     text_var.set("Todas as transcrições foram concluídas.")
     btn_select.config(text="Selecionar Arquivos e Local de Salvamento",
-                     command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+                      command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
     btn_modelo.config(state=tk.NORMAL)
     btn_abrir.config(state=tk.NORMAL, command=lambda: abrir_local_salvamento(filepaths))
 
@@ -124,6 +197,8 @@ def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, mod
         logging.info("Seleção de arquivo cancelada pelo usuário.")
         return None
 
+    filepaths = [filepath.replace("/", "\\") for filepath in filepaths]  # Garantir barra invertida
+
     text_var.set(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
     btn_select.config(text="Cancelar desgravação", command=lambda: cancelar_desgravacao_fn(btn_select, btn_modelo))
     btn_modelo.config(state=tk.DISABLED)
@@ -134,7 +209,7 @@ def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, mod
 def cancelar_desgravacao_fn(btn_select, btn_modelo):
     global cancelar_desgravacao
     cancelar_desgravacao = True
-    btn_select.config(text="Selecionar Arquivos e Local de Salvamento",command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+    btn_select.config(text="Selecionar Arquivos e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
     btn_modelo.config(state=tk.NORMAL)
     text_var.set("Cancelamento em processo...")
     logging.info("Processo de desgravação cancelado pelo usuário.")
