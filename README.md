@@ -22,22 +22,15 @@ O **Desgravador** é uma aplicação desenvolvida em Python que permite a transc
 
 1. Clone o repositório:
     ```bash
-    git clone https://github.com/seu-usuario/desgravador.git
-    cd desgravador
+    git clone https://github.com/finnzao/WhisperDesktopPy.git
     ```
-
-2. Instale as dependências:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3. Certifique-se de que o FFmpeg está na pasta `ffmpeg` dentro do diretório do projeto().
+2. Certifique-se de que o FFmpeg está na pasta `ffmpeg` dentro do diretório do projeto().
 
 ## Uso
 
 1. Execute o script principal:
     ```bash
-    python desgravador.py
+    python textifyVoice.py
     ```
 
 2. Na interface gráfica:
