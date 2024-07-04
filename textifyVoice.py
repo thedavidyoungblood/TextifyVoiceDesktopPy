@@ -1,5 +1,6 @@
 import os
 import logging
+from logging.handlers import RotatingFileHandler
 from docx import Document
 import tkinter as tk
 from plyer import notification
@@ -9,13 +10,24 @@ from threading import Thread
 import webbrowser
 from tkinter import filedialog, messagebox, ttk
 import json
-from moviepy.editor import VideoFileClip
+import subprocess
 import warnings
 
 warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
 warnings.filterwarnings("ignore", category=UserWarning, message="FP16 is not supported on CPU; using FP32 instead")
 
 CONFIG_FILE = "config.json"
+DEFAULT_CONFIG = {
+    "model_path": ""
+}
+
+# Verificar se o arquivo de configuração existe, caso contrário, criar um com valores padrão
+if not os.path.exists(CONFIG_FILE):
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(DEFAULT_CONFIG, f, indent=4)
+    logging.info(f"Arquivo de configuração criado: {CONFIG_FILE}")
+
+# Carregar a configuração
 config = {}
 try:
     with open(CONFIG_FILE, 'r') as f:
@@ -26,8 +38,15 @@ except FileNotFoundError:
 def configurar_logger():
     if not os.path.exists("logs"):
         os.makedirs("logs")
-    logging.basicConfig(filename='logs/info.log', level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
+    
+    # Configurar o RotatingFileHandler
+    log_handler = RotatingFileHandler('logs/info.log', maxBytes=5*1024*1024, backupCount=5)
+    log_handler.setLevel(logging.INFO)
+    log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    logger.addHandler(log_handler)
 
 configurar_logger()
 
@@ -35,14 +54,21 @@ cancelar_desgravacao = False
 
 def extrair_audio(filepath, output_path):
     try:
-        video = VideoFileClip(filepath)
-        if video.audio is None:
-            raise ValueError(f"O arquivo {filepath} não contém uma faixa de áudio.")
-        audio = video.audio
-        audio.write_audiofile(output_path, codec='pcm_s16le')
+        logging.info(f"Extraindo áudio do vídeo: {filepath}")
+        # Caminho para o executável do FFmpeg dentro da pasta da aplicação
+        ffmpeg_path = os.path.join('.', 'ffmpeg', 'ffmpeg.exe')
+        
+        command = [
+            ffmpeg_path,
+            '-i', filepath,
+            output_path
+        ]
+        # Redirecionar a saída para suprimir as mensagens do FFmpeg
+        with open(os.devnull, 'w') as devnull:
+            subprocess.run(command, stdout=devnull, stderr=devnull)
         logging.info(f"Áudio extraído com sucesso para: {output_path}")
-    except Exception as e:
-        logging.error(f"Erro ao extrair áudio com moviepy: {e}")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Erro ao extrair áudio com ffmpeg: {e}")
         raise
 
 def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path):
@@ -70,7 +96,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
 
         if cancelar_desgravacao:
             text_var.set("Desgravação cancelada. Selecione arquivos para começar.")
-            btn_select.config(text="Selecionar Arquivos e Local de Salvamento",
+            btn_select.config(text="Selecionar Arquivos",
                               command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
             btn_modelo.config(state=tk.NORMAL)
             cancelar_desgravacao = False
@@ -153,7 +179,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
         except Exception as e:
             logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {e}")
             cancelar_desgravacao = True
-            text_var.set(f"Erro no desgravando {nome_arquivo}. Motivo: {e}")
+            text_var.set(f"Erro no desgravando {nome_arquivo}.")
             btn_select.config(text="Selecionar Arquivos para transcrição",
                               command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
             btn_modelo.config(state=tk.NORMAL)
@@ -166,7 +192,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
             return
 
     text_var.set("Todas as transcrições foram concluídas.")
-    btn_select.config(text="Selecionar Arquivos e Local de Salvamento",
+    btn_select.config(text="Selecionar Arquivos",
                       command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
     btn_modelo.config(state=tk.NORMAL)
     btn_abrir.config(state=tk.NORMAL, command=lambda: abrir_local_salvamento(filepaths))
@@ -209,22 +235,10 @@ def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, mod
 def cancelar_desgravacao_fn(btn_select, btn_modelo):
     global cancelar_desgravacao
     cancelar_desgravacao = True
-    btn_select.config(text="Selecionar Arquivos e Local de Salvamento", command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+    btn_select.config(text="Selecionar Arquivos", command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
     btn_modelo.config(state=tk.NORMAL)
     text_var.set("Cancelamento em processo...")
     logging.info("Processo de desgravação cancelado pelo usuário.")
-
-def verificar_modelo(model_path, janela_modelo, model_path_var):
-    try:
-        whisper.load_model(model_path)
-        messagebox.showinfo("Sucesso", "Modelo carregado com sucesso!")
-        config['model_path'] = model_path
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f)
-        model_path_var.set(model_path)
-        janela_modelo.destroy()
-    except Exception as e:
-        messagebox.showerror("Erro", f"Erro ao carregar o modelo: {e}")
 
 def selecionar_modelo():
     janela_modelo = tk.Toplevel()
@@ -244,12 +258,19 @@ def selecionar_modelo():
         filepath = filedialog.askopenfilename(title="Selecionar Modelo Whisper", filetypes=[("Modelo Whisper", "*.pt;*.bin")])
         if filepath:
             model_path_var_local.set(filepath)
+            try:
+                whisper.load_model(filepath)
+                config['model_path'] = filepath
+                with open(CONFIG_FILE, 'w') as f:
+                    json.dump(config, f)
+                model_path_var.set(filepath)
+                messagebox.showinfo("Sucesso", "Modelo carregado e caminho salvo com sucesso!")
+                janela_modelo.destroy()
+            except Exception as e:
+                messagebox.showerror("Erro", f"Erro ao carregar o modelo: {e}")
 
     btn_escolher = ttk.Button(janela_modelo, text="Escolher Modelo", command=escolher_modelo)
     btn_escolher.pack(pady=10)
-
-    btn_verificar = ttk.Button(janela_modelo, text="Verificar Modelo", command=lambda: verificar_modelo(model_path_var_local.get(), janela_modelo, model_path_var))
-    btn_verificar.pack(pady=10)
 
 def verificar_modelo_inicial():
     model_path = config.get('model_path')
@@ -265,7 +286,7 @@ def verificar_modelo_inicial():
         selecionar_modelo()
 
 root = tk.Tk()
-root.title("Desgravador [ Beta ]")
+root.title("TextifyVoice [ Beta ] by @felipe.sh")
 
 root.geometry("650x500")
 
@@ -292,7 +313,7 @@ title_frame = ttk.Frame(root, style="TFrame", height=70)
 title_frame.pack(side=tk.TOP, fill=tk.X)
 title_frame.pack_propagate(False)
 
-titulo = ttk.Label(title_frame, text="Transcritor de Áudio", style="Title.TLabel", anchor="center")
+titulo = ttk.Label(title_frame, text="Transcritor de Vídeo", style="Title.TLabel", anchor="center")
 titulo.pack(side=tk.TOP, fill=tk.X, pady=20)
 
 frame = ttk.Frame(root, style="TFrame")
@@ -307,7 +328,7 @@ model_path = config.get('model_path')
 model_path_var = tk.StringVar(value=model_path)
 
 btn_abrir = ttk.Button(frame, text="Abrir Pasta de Documentos Transcritos", state=tk.DISABLED, style="TButton")
-btn_select = ttk.Button(frame, text="Selecionar Arquivos e Local de Salvamento", style="TButton")
+btn_select = ttk.Button(frame, text="Selecionar Arquivos", style="TButton")
 btn_modelo = ttk.Button(frame, text="Selecionar qualidade", command=selecionar_modelo, style="Modelo.TButton")
 
 def iniciar_processo(btn_abrir, btn_select, btn_modelo):

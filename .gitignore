@@ -1,8 +1,10 @@
 dist
 build
-main.spec
+*.spec
 logs
 model
 textify
 main.spec
 config.json
+ffmpeg
+temp
