@@ -1,4 +1,4 @@
-# TextifyVoice [ Beta ] by @felipe.sh
+# TextifyVoice [ Beta ] 
 
 ## Descrição
 
@@ -85,10 +85,3 @@ Contribuições são bem-vindas! Sinta-se à vontade para abrir issues e pull re
 
 Este projeto está licenciado sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
 
-## Contato
-
-Para mais informações, entre em contato com @felipe.sh.
-
----
-
-Este README fornece uma visão geral do Desgravador, incluindo suas funcionalidades, requisitos, instruções de instalação e uso, estrutura do projeto, configuração, gerenciamento de logs, e informações sobre contribuição e licença.
