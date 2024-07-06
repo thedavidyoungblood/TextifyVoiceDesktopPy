@@ -72,7 +72,7 @@ def extrair_audio(filepath, output_path):
         logging.error(f"Erro ao extrair áudio com ffmpeg: {e}")
         raise
 
-def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo, model_path):
+def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo, language_dropdown, model_path, language):
     global cancelar_desgravacao
 
     try:
@@ -98,8 +98,9 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
         if cancelar_desgravacao:
             text_var.set("Desgravação cancelada. Selecione arquivos para começar.")
             btn_select.config(text="Selecionar Arquivos",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo, language_dropdown, language_var))
             btn_modelo.config(state=tk.NORMAL)
+            language_dropdown.config(state=tk.NORMAL)
             cancelar_desgravacao = False
             logging.info("Desgravação cancelada pelo usuário.")
             return
@@ -120,7 +121,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
             text_var.set(f"Desgravando: {nome_arquivo} ⏳ Por favor, aguarde.")
             logging.info(f"Iniciando transcrição do arquivo: {audio_temp_path}")
 
-            result = model.transcribe(audio_temp_path, language="pt")
+            result = model.transcribe(audio_temp_path, language=language)
             doc = Document()
             for segment in result["segments"]:
                 text = segment["text"]
@@ -137,8 +138,9 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
             cancelar_desgravacao = True
             text_var.set(f"Erro no desgravando {nome_arquivo}. Motivo: {fnf_error}")
             btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo, language_dropdown, language_var))
             btn_modelo.config(state=tk.NORMAL)
+            language_dropdown.config(state=tk.NORMAL)
             notification.notify(
                 title="Erro na Transcrição",
                 message=f"O arquivo {filepath} não foi encontrado.",
@@ -152,8 +154,9 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
             cancelar_desgravacao = True
             text_var.set(f"Erro no desgravando {nome_arquivo}. Motivo: {perm_error}")
             btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo, language_dropdown, language_var))
             btn_modelo.config(state=tk.NORMAL)
+            language_dropdown.config(state=tk.NORMAL)
             notification.notify(
                 title="Erro na Transcrição",
                 message=f"Permissão negada para acessar o arquivo {filepath}.",
@@ -167,8 +170,9 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
             cancelar_desgravacao = True
             text_var.set(f"Erro no desgravando {nome_arquivo}. Motivo: {val_error}")
             btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo, language_dropdown, language_var))
             btn_modelo.config(state=tk.NORMAL)
+            language_dropdown.config(state=tk.NORMAL)
             notification.notify(
                 title="Erro na Transcrição",
                 message=f"O arquivo {filepath} não contém uma faixa de áudio.",
@@ -182,8 +186,9 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
             cancelar_desgravacao = True
             text_var.set(f"Erro no desgravando {nome_arquivo}.")
             btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo, language_dropdown, language_var))
             btn_modelo.config(state=tk.NORMAL)
+            language_dropdown.config(state=tk.NORMAL)
             notification.notify(
                 title="Erro na Transcrição",
                 message=f"Ocorreu um erro ao transcrever {nome_arquivo}.",
@@ -194,8 +199,9 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
 
     text_var.set("Todas as transcrições foram concluídas.")
     btn_select.config(text="Selecionar Arquivos",
-                      command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+                      command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo, language_dropdown, language_var))
     btn_modelo.config(state=tk.NORMAL)
+    language_dropdown.config(state=tk.NORMAL)
     btn_abrir.config(state=tk.NORMAL, command=lambda: abrir_local_salvamento(filepaths))
 
     logging.info("Todas as transcrições foram concluídas com sucesso.")
@@ -212,10 +218,10 @@ def abrir_local_salvamento(filepaths):
         webbrowser.open(diretorio)
         logging.info(f"Abrindo diretório de salvamento: {diretorio}")
 
-def iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, btn_modelo, model_path):
-    Thread(target=lambda: extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo, model_path)).start()
+def iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, btn_modelo, language_dropdown, model_path, language):
+    Thread(target=lambda: extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo, language_dropdown, model_path, language)).start()
 
-def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, model_path):
+def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, language_dropdown, model_path, language):
     global cancelar_desgravacao
     filepaths = filedialog.askopenfilenames(title="Escolher os vídeos que serão transcritos para texto",
                                             filetypes=[("MP4 files", "*.mp4"), ("MP3 files", "*.mp3")])
@@ -227,17 +233,19 @@ def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, mod
     filepaths = [filepath.replace("/", "\\") for filepath in filepaths]  # Garantir barra invertida
 
     text_var.set(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
-    btn_select.config(text="Cancelar desgravação", command=lambda: cancelar_desgravacao_fn(btn_select, btn_modelo))
+    btn_select.config(text="Cancelar desgravação", command=lambda: cancelar_desgravacao_fn(btn_select, btn_modelo, language_dropdown))
     btn_modelo.config(state=tk.DISABLED)
+    language_dropdown.config(state=tk.DISABLED)
     btn_abrir.config(state=tk.DISABLED)
     logging.info(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
     return filepaths
 
-def cancelar_desgravacao_fn(btn_select, btn_modelo):
+def cancelar_desgravacao_fn(btn_select, btn_modelo, language_dropdown):
     global cancelar_desgravacao
     cancelar_desgravacao = True
-    btn_select.config(text="Selecionar Arquivos", command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+    btn_select.config(text="Selecionar Arquivos", command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo, language_dropdown, language_var))
     btn_modelo.config(state=tk.NORMAL)
+    language_dropdown.config(state=tk.NORMAL)
     text_var.set("Cancelamento em processo...")
     logging.info("Processo de desgravação cancelado pelo usuário.")
 
@@ -331,18 +339,33 @@ text_label.pack()
 model_path = config.get('model_path')
 model_path_var = tk.StringVar(value=model_path)
 
+language = config.get('language', 'pt')
+language_var = tk.StringVar(value=language)
+
 btn_abrir = ttk.Button(frame, text="Abrir Pasta de Documentos Transcritos", state=tk.DISABLED, style="TButton")
 btn_select = ttk.Button(frame, text="Selecionar Arquivos", style="TButton")
 btn_modelo = ttk.Button(frame, text="Selecionar Modelo", command=selecionar_modelo, style="Modelo.TButton")
 
-def iniciar_processo(btn_abrir, btn_select, btn_modelo):
-    filepaths = selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, model_path_var.get())
-    if filepaths:
-        iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, btn_modelo, model_path_var.get())
+# Lista de linguagens disponíveis no Whisper
+LANGUAGES = [
+    "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl", "ar", "sv", "it", "id", "hi", "fi", "vi", "he", "uk", "el", "ms", "cs", "ro", "da", "hu", "ta", "no", "th", "ur", "hr", "bg", "lt", "la", "mi", "ml", "cy", "sk", "te", "fa", "lv", "bn", "sr", "az", "sl", "kn", "et", "mk", "br", "eu", "is", "hy", "ne", "mn", "bs", "kk", "sq", "sw", "gl", "mr", "pa", "si", "km", "sn", "yo", "so", "af", "oc", "ka", "be", "tg", "sd", "gu", "am", "yi", "lo", "uz", "fo", "ht", "ps", "tk", "nn", "mt", "sa", "lb", "my", "bo", "tl", "mg", "as", "tt", "haw", "ln", "ha", "ba", "jw", "su"
+]
 
-btn_select.config(command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+# Dropdown menu para selecionar a linguagem
+language_label = ttk.Label(frame, text="Selecione a Linguagem:", style="TLabel")
+language_dropdown = ttk.OptionMenu(frame, language_var, language, *LANGUAGES)
+
+
+def iniciar_processo(btn_abrir, btn_select, btn_modelo, language_dropdown, language_var):
+    filepaths = selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, language_dropdown, model_path_var.get(), language_var.get())
+    if filepaths:
+        iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, btn_modelo, language_dropdown, model_path_var.get(), language_var.get())
+
+btn_select.config(command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo, language_dropdown, language_var))
 btn_select.pack(pady=(10, 0))
 btn_abrir.pack(pady=(10, 20))
+language_label.pack(pady=(10, 0))
+language_dropdown.pack(pady=(0, 10))
 btn_modelo.pack(pady=(10, 0))
 
 root.after(100, verificar_modelo_inicial)
