@@ -255,7 +255,7 @@ def selecionar_modelo():
     entry.pack(pady=10)
 
     def escolher_modelo():
-        filepath = filedialog.askopenfilename(title="Selecionar Modelo Whisper", filetypes=[("Modelo Whisper", "*.pt;*.bin")])
+        filepath = filedialog.askopenfilename(title="Selecionar Modelo Whisper", filetypes=[("Modelo Whisper", "*.pt")])
         if filepath:
             model_path_var_local.set(filepath)
             try:
@@ -268,6 +268,7 @@ def selecionar_modelo():
                 janela_modelo.destroy()
             except Exception as e:
                 messagebox.showerror("Erro", f"Erro ao carregar o modelo: {e}")
+                logging.info(f"Erro ao carregar modelo. {e}")
 
     btn_escolher = ttk.Button(janela_modelo, text="Escolher Modelo", command=escolher_modelo)
     btn_escolher.pack(pady=10)
@@ -286,7 +287,7 @@ def verificar_modelo_inicial():
         selecionar_modelo()
 
 root = tk.Tk()
-root.title("TextifyVoice [ Beta ] by @felipe.sh")
+root.title("TextifyVoice [ Beta ]")
 
 root.geometry("650x500")
 
