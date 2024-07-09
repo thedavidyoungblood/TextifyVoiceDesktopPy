@@ -19,16 +19,14 @@ warnings.filterwarnings("ignore", category=UserWarning, message="FP16 is not sup
 CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
     "model_path": "",
-    "language": "pt"  # Linguagem padrão alterada para português
+    "language": "pt"
 }
 
-# Verificar se o arquivo de configuração existe, caso contrário, criar um com valores padrão
 if not os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(DEFAULT_CONFIG, f, indent=4)
     logging.info(f"Arquivo de configuração criado: {CONFIG_FILE}")
 
-# Carregar a configuração
 config = {}
 try:
     with open(CONFIG_FILE, 'r') as f:
@@ -218,7 +216,7 @@ def iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, btn_m
 def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, model_path):
     global cancelar_desgravacao
     filepaths = filedialog.askopenfilenames(title="Escolher os vídeos que serão transcritos para texto",
-                                            filetypes=[("MP4 files", "*.mp4"), ("MP3 files", "*.mp3")])
+                                            filetypes=[("Arquivos Selecionáveis", "*.mp4;*.mp3;*.wav;*.mkv"),("MP4 files", "*.mp4",), ("MP3 files", "*.mp3"),("WAV files", "*.wav")])
     if not filepaths:
         text_var.set("Seleção de arquivo cancelada. Operação interrompida.")
         logging.info("Seleção de arquivo cancelada pelo usuário.")
@@ -288,7 +286,7 @@ def verificar_modelo_inicial():
         selecionar_modelo()
 
 root = tk.Tk()
-root.title("TextifyVoice [ Beta ]")
+root.title("TextifyVoice [ Beta ] by@felipe.sh")
 
 root.geometry("650x500")
 
