@@ -38,7 +38,6 @@ def configurar_logger():
     if not os.path.exists("logs"):
         os.makedirs("logs")
     
-    # Configurar o RotatingFileHandler
     log_handler = RotatingFileHandler('logs/info.log', maxBytes=5*1024*1024, backupCount=5)
     log_handler.setLevel(logging.INFO)
     log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
@@ -54,17 +53,13 @@ cancelar_desgravacao = False
 def extrair_audio(filepath, output_path):
     try:
         logging.info(f"Extraindo áudio do vídeo: {filepath}")
-        # Caminho para o executável do FFmpeg dentro da pasta da aplicação
+
         ffmpeg_path = os.path.join('.', 'ffmpeg', 'ffmpeg.exe')
         
-        command = [
-            ffmpeg_path,
-            '-i', filepath,
-            output_path
-        ]
-        # Redirecionar a saída para suprimir as mensagens do FFmpeg
-        with open(os.devnull, 'w') as devnull:
-            subprocess.run(command, stdout=devnull, stderr=devnull)
+        command = f'{ffmpeg_path} -i "{filepath}" "{output_path}" > nul 2>&1 -y'
+        
+        subprocess.run(command, shell=True, check=True)
+        
         logging.info(f"Áudio extraído com sucesso para: {output_path}")
     except subprocess.CalledProcessError as e:
         logging.error(f"Erro ao extrair áudio com ffmpeg: {e}")
