@@ -57,10 +57,10 @@ def extrair_audio(filepath, output_path):
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         si.wShowWindow = subprocess.SW_HIDE
         ffmpeg_path = os.path.join('.', 'ffmpeg', 'ffmpeg.exe')
-
+        ffmpeg_path = os.path.abspath(ffmpeg_path)
         command = f'{ffmpeg_path} -i "{filepath}" "{output_path}" > nul 2>&1 -y'
-        
-        subprocess.run(command, shell=True, check=True)
+        print(command)
+        subprocess.run(command, shell=True, check=True,startupinfo=si)
         
         logging.info(f"Áudio extraído com sucesso para: {output_path}")
     except subprocess.CalledProcessError as e:
