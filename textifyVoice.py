@@ -53,9 +53,11 @@ cancelar_desgravacao = False
 def extrair_audio(filepath, output_path):
     try:
         logging.info(f"Extraindo áudio do vídeo: {filepath}")
-
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = subprocess.SW_HIDE
         ffmpeg_path = os.path.join('.', 'ffmpeg', 'ffmpeg.exe')
-        
+
         command = f'{ffmpeg_path} -i "{filepath}" "{output_path}" > nul 2>&1 -y'
         
         subprocess.run(command, shell=True, check=True)
