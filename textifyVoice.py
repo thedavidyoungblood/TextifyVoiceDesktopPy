@@ -86,7 +86,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
         logging.info(f"Diretório temporário criado: {temp_dir}")
 
     for filepath in filepaths:
-        filepath = filepath.replace("/", "\\")  # Garantir barra invertida
+        filepath = filepath.replace("/", "\\") 
         logging.info(f"Analisando arquivo: {filepath}")
         text_var.set("Processando arquivos...")
 
@@ -101,14 +101,13 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
 
         nome_arquivo = os.path.splitext(os.path.basename(filepath))[0]
         local_salvamento = os.path.join(os.path.dirname(filepath), nome_arquivo + "_text.docx")
-        local_salvamento = local_salvamento.replace("/", "\\")  # Garantir barra invertida
+        local_salvamento = local_salvamento.replace("/", "\\") 
         logging.info(f"Transcrição será salva em: {local_salvamento}")
 
         try:
             if not os.path.exists(filepath):
                 raise FileNotFoundError(f"O arquivo {filepath} não foi encontrado.")
 
-            # Extrair áudio do vídeo
             audio_temp_path = os.path.join(temp_dir, nome_arquivo + "_audio.wav")
             extrair_audio(filepath, audio_temp_path)
 
@@ -124,13 +123,13 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
             doc.save(local_salvamento)
             logging.info(f"Transcrição concluída salva em: {local_salvamento}")
 
-            # Remover arquivo de áudio temporário
+           
             os.remove(audio_temp_path)
 
         except FileNotFoundError as fnf_error:
-            logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {fnf_error}")
+            logging.error(f"Erro ao transcrever (fnf_error) {nome_arquivo}. Motivo: {fnf_error}")
             cancelar_desgravacao = True
-            text_var.set(f"Erro no desgravando {nome_arquivo}. Motivo: {fnf_error}")
+            text_var.set(f"Erro no desgravando {nome_arquivo}.")
             btn_select.config(text="Selecionar Arquivos para transcrição",
                               command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
             btn_modelo.config(state=tk.NORMAL)
@@ -143,9 +142,9 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
             return
 
         except PermissionError as perm_error:
-            logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {perm_error}")
+            logging.error(f"Erro ao transcrever (PermissionError) {nome_arquivo}. Motivo: {perm_error}")
             cancelar_desgravacao = True
-            text_var.set(f"Erro no desgravando {nome_arquivo}. Motivo: {perm_error}")
+            text_var.set(f"Erro no desgravando {nome_arquivo}.")
             btn_select.config(text="Selecionar Arquivos para transcrição",
                               command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
             btn_modelo.config(state=tk.NORMAL)
@@ -158,9 +157,9 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
             return
 
         except ValueError as val_error:
-            logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {val_error}")
+            logging.error(f"Erro ao transcrever (val_error) {nome_arquivo}. Motivo: {val_error}")
             cancelar_desgravacao = True
-            text_var.set(f"Erro no desgravando {nome_arquivo}. Motivo: {val_error}")
+            text_var.set(f"Erro no desgravando {nome_arquivo}.")
             btn_select.config(text="Selecionar Arquivos para transcrição",
                               command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
             btn_modelo.config(state=tk.NORMAL)
@@ -173,7 +172,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
             return
 
         except Exception as e:
-            logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {e}")
+            logging.error(f"Erro ao transcrever (Generic) {nome_arquivo}. Motivo: {e}")
             cancelar_desgravacao = True
             text_var.set(f"Erro no desgravando {nome_arquivo}.")
             btn_select.config(text="Selecionar Arquivos para transcrição",
@@ -219,7 +218,7 @@ def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, mod
         logging.info("Seleção de arquivo cancelada pelo usuário.")
         return None
 
-    filepaths = [filepath.replace("/", "\\") for filepath in filepaths]  # Garantir barra invertida
+    filepaths = [filepath.replace("/", "\\") for filepath in filepaths] 
 
     text_var.set(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
     btn_select.config(text="Cancelar desgravação", command=lambda: cancelar_desgravacao_fn(btn_select, btn_modelo))
