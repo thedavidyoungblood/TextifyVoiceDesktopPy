@@ -54,12 +54,11 @@ def extrair_audio(filepath, output_path):
     try:
         logging.info(f"Extraindo áudio do vídeo: {filepath}")
         si = subprocess.STARTUPINFO()
-        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.dwFlags = subprocess.STARTF_USESHOWWINDOW
         si.wShowWindow = subprocess.SW_HIDE
         ffmpeg_path = os.path.join('.', 'ffmpeg', 'ffmpeg.exe')
         ffmpeg_path = os.path.abspath(ffmpeg_path)
-        command = f'{ffmpeg_path} -i "{filepath}" "{output_path}" > nul 2>&1 -y'
-        print(command)
+        command = f'{ffmpeg_path} -i "{filepath}" "{output_path}" -y'
         subprocess.run(command, shell=True, check=True,startupinfo=si)
         
         logging.info(f"Áudio extraído com sucesso para: {output_path}")
@@ -74,7 +73,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
         logging.info(f"Tentando carregar o modelo do caminho: {model_path}")
         model = whisper.load_model(model_path)
         if model:
-            logging.info(f"Modelo de transcrição carregado com sucesso: {model}")
+            logging.info(f"Modelo de transcrição carregado com sucesso")
     except Exception as e:
         logging.error(f"Erro ao carregar o modelo de transcrição: {e}")
         text_var.set(f"Erro ao carregar o modelo. Verifique o caminho.")
