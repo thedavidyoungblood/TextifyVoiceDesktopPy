@@ -12,7 +12,6 @@ from plyer import notification
 import winsound
 import ffmpeg
 import json
-import subprocess
 import tqdm
 import urllib.request
 
@@ -55,17 +54,14 @@ cancelar_desgravacao = False
 
 def extrair_audio(filepath, temp_dir):
     try:
-        # Verifica se o arquivo já é um formato de áudio suportado
         if filepath.lower().endswith(('.mp3', '.wav', '.aac', '.flac', '.m4a', '.ogg')):
             logging.info(f"O arquivo {filepath} já é um formato de áudio suportado. Não é necessário extrair o áudio.")
             return filepath
         
         logging.info(f"Extraindo áudio do vídeo: {filepath}")
         
-        # Define o caminho do arquivo temporário de áudio
         output_path = os.path.join(temp_dir, "temp_audio.aac")
         
-        # Executa o comando FFmpeg usando a biblioteca ffmpeg-python
         (
             ffmpeg
             .input(filepath)
@@ -79,7 +75,7 @@ def extrair_audio(filepath, temp_dir):
         logging.error(f"Erro ao extrair áudio com ffmpeg: {e.stderr.decode()}")
         raise
 
-def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo, model_path):
+def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path):
     global cancelar_desgravacao
 
     try:
@@ -105,8 +101,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
         if cancelar_desgravacao:
             text_var.set("Desgravação cancelada. Selecione arquivos para começar.")
             btn_select.config(text="Selecionar Arquivos",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
-            btn_modelo.config(state=tk.NORMAL)
+                              command=lambda: iniciar_processo(btn_abrir, btn_select))
             cancelar_desgravacao = False
             logging.info("Desgravação cancelada pelo usuário.")
             return
@@ -142,8 +137,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
             cancelar_desgravacao = True
             text_var.set(f"Erro no desgravando {nome_arquivo}.")
             btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
-            btn_modelo.config(state=tk.NORMAL)
+                              command=lambda: iniciar_processo(btn_abrir, btn_select))
             notification.notify(
                 title="Erro na Transcrição",
                 message=f"O arquivo {filepath} não foi encontrado.",
@@ -157,8 +151,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
             cancelar_desgravacao = True
             text_var.set(f"Erro no desgravando {nome_arquivo}.")
             btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
-            btn_modelo.config(state=tk.NORMAL)
+                              command=lambda: iniciar_processo(btn_abrir, btn_select))
             notification.notify(
                 title="Erro na Transcrição",
                 message=f"Permissão negada para acessar o arquivo {filepath}.",
@@ -172,8 +165,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
             cancelar_desgravacao = True
             text_var.set(f"Erro no desgravando {nome_arquivo}.")
             btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
-            btn_modelo.config(state=tk.NORMAL)
+                              command=lambda: iniciar_processo(btn_abrir, btn_select))
             notification.notify(
                 title="Erro na Transcrição",
                 message=f"O arquivo {filepath} não contém uma faixa de áudio.",
@@ -187,8 +179,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
             cancelar_desgravacao = True
             text_var.set(f"Erro no desgravando {nome_arquivo}.")
             btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
-            btn_modelo.config(state=tk.NORMAL)
+                              command=lambda: iniciar_processo(btn_abrir, btn_select))
             notification.notify(
                 title="Erro na Transcrição",
                 message=f"Ocorreu um erro ao transcrever {nome_arquivo}.",
@@ -199,8 +190,7 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
 
     text_var.set("Todas as transcrições foram concluídas.")
     btn_select.config(text="Selecionar Arquivos",
-                      command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
-    btn_modelo.config(state=tk.NORMAL)
+                      command=lambda: iniciar_processo(btn_abrir, btn_select))
     btn_abrir.config(state=tk.NORMAL, command=lambda: abrir_local_salvamento(filepaths))
 
     logging.info("Todas as transcrições foram concluídas com sucesso.")
@@ -217,10 +207,10 @@ def abrir_local_salvamento(filepaths):
         webbrowser.open(diretorio)
         logging.info(f"Abrindo diretório de salvamento: {diretorio}")
 
-def iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, btn_modelo, model_path):
-    Thread(target=lambda: extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo, model_path)).start()
+def iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, model_path):
+    Thread(target=lambda: extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path)).start()
 
-def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, model_path):
+def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, model_path):
     global cancelar_desgravacao
     filepaths = filedialog.askopenfilenames(title="Escolher os vídeos que serão transcritos para texto",
                                             filetypes=[("Arquivos Selecionáveis", "*.mp4;*.mp3;*.wav;*.mkv"),("MP4 files", "*.mp4",), ("MP3 files", "*.mp3"),("WAV files", "*.wav")])
@@ -232,17 +222,15 @@ def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, mod
     filepaths = [filepath.replace("/", "\\") for filepath in filepaths] 
 
     text_var.set(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
-    btn_select.config(text="Cancelar desgravação", command=lambda: cancelar_desgravacao_fn(btn_select, btn_modelo))
-    btn_modelo.config(state=tk.DISABLED)
+    btn_select.config(text="Cancelar desgravação", command=lambda: cancelar_desgravacao_fn(btn_select))
     btn_abrir.config(state=tk.DISABLED)
     logging.info(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
     return filepaths
 
-def cancelar_desgravacao_fn(btn_select, btn_modelo):
+def cancelar_desgravacao_fn(btn_select):
     global cancelar_desgravacao
     cancelar_desgravacao = True
-    btn_select.config(text="Selecionar Arquivos", command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
-    btn_modelo.config(state=tk.NORMAL)
+    btn_select.config(text="Selecionar Arquivos", command=lambda: iniciar_processo(btn_abrir, btn_select))
     text_var.set("Cancelamento em processo...")
     logging.info("Processo de desgravação cancelado pelo usuário.")
 
@@ -253,7 +241,7 @@ def selecionar_modelo():
     janela_modelo.grab_set()
 
     label = ttk.Label(janela_modelo, text="Selecione o caminho do modelo:")
-    label.pack(pady=10)
+    label.pack(pady=20)
 
     model_path_var_local = tk.StringVar(value=config.get('model_path', ''))
 
@@ -288,18 +276,18 @@ def verificar_modelo_inicial():
         except Exception as e:
             logging.error(f"Erro ao carregar o modelo inicial: {e}")
             messagebox.showerror("Erro", f"Erro ao carregar o modelo inicial: {e}")
-            selecionar_modelo()
+            selecionar_qualidade()
     else:
-        selecionar_modelo()
+        selecionar_qualidade()
 
 def selecionar_qualidade():
     janela_qualidade = tk.Toplevel()
     janela_qualidade.title("Selecionar Qualidade")
-    janela_qualidade.geometry("400x300")
+    janela_qualidade.geometry("500x400")
     janela_qualidade.grab_set()
 
-    label = ttk.Label(janela_qualidade, text="Escolha um dos modelos de transcrição da lista abaixo e faça o download do arquivo correspondente:")
-    label.pack(pady=10)
+    label = ttk.Label(janela_qualidade, text="Escolha um dos modelos de transcrição:")
+    label.pack(pady=20)
 
     modelos = {
         "medium": "https://openaipublic.azureedge.net/main/whisper/models/345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/medium.pt",
@@ -311,7 +299,7 @@ def selecionar_qualidade():
 
     qualidade_var = tk.StringVar(value="medium")
 
-    drop_down = ttk.OptionMenu(janela_qualidade, qualidade_var, *modelos.keys())
+    drop_down = ttk.OptionMenu(janela_qualidade, qualidade_var, "medium", *modelos.keys())
     drop_down.pack(pady=10)
 
     def baixar_modelo():
@@ -322,19 +310,39 @@ def selecionar_qualidade():
             os.makedirs(diretorio_modelo)
         caminho_modelo = os.path.join(diretorio_modelo, f"{modelo_selecionado}.pt")
 
+        if os.path.exists(caminho_modelo):
+            config['model_path'] = caminho_modelo
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump(config, f)
+            model_path_var.set(caminho_modelo)
+            messagebox.showinfo("Modelo já existe", "O modelo já foi baixado anteriormente.")
+            janela_qualidade.destroy()
+            return
+
         janela_progresso = tk.Toplevel()
         janela_progresso.title("Baixando Modelo")
-        janela_progresso.geometry("400x100")
+        janela_progresso.geometry("400x150")
+        janela_progresso.resizable(False, False)
         janela_progresso.grab_set()
 
         progresso_var = tk.DoubleVar()
         barra_progresso = ttk.Progressbar(janela_progresso, variable=progresso_var, maximum=100)
         barra_progresso.pack(pady=20, padx=20, fill=tk.X)
 
+        label_progresso = ttk.Label(janela_progresso, text="Aguardando o download ser finalizado...")
+        label_progresso.pack(pady=5)
+
+        cancelar_download = False
+
+        class DownloadCancelado(Exception):
+            pass
+
         def hook(t):
             last_b = [0]
 
             def inner(b=1, bsize=1, tsize=None):
+                if cancelar_download:
+                    raise DownloadCancelado()
                 if tsize is not None:
                     t.total = tsize
                 t.update((b - last_b[0]) * bsize)
@@ -343,23 +351,52 @@ def selecionar_qualidade():
 
             return inner
 
-        try:
-            with tqdm.tqdm(unit='B', unit_scale=True, unit_divisor=1024, miniters=1, desc=f"Downloading {modelo_selecionado}.pt") as t:
-                urllib.request.urlretrieve(url, caminho_modelo, reporthook=hook(t))
+        def baixar_modelo_thread():
+            nonlocal cancelar_download
+            try:
+                with tqdm.tqdm(unit='B', unit_scale=True, unit_divisor=1024, miniters=1, desc=f"Downloading {modelo_selecionado}.pt") as t:
+                    urllib.request.urlretrieve(url, caminho_modelo, reporthook=hook(t))
+                    if cancelar_download:
+                        os.remove(caminho_modelo)
+                        return
 
-            config['model_path'] = caminho_modelo
-            with open(CONFIG_FILE, 'w') as f:
-                json.dump(config, f)
-            model_path_var.set(caminho_modelo)
-            messagebox.showinfo("Sucesso", "Modelo baixado e caminho salvo com sucesso!")
+                config['model_path'] = caminho_modelo
+                with open(CONFIG_FILE, 'w') as f:
+                    json.dump(config, f)
+                model_path_var.set(caminho_modelo)
+                messagebox.showinfo("Sucesso", "Modelo baixado e caminho salvo com sucesso!")
+                janela_progresso.destroy()
+                janela_qualidade.destroy()
+            except DownloadCancelado:
+                if os.path.exists(caminho_modelo):
+                    os.remove(caminho_modelo)
+                messagebox.showinfo("Download Cancelado", "O download foi cancelado.")
+                janela_progresso.destroy()
+            except Exception as e:
+                if not cancelar_download:
+                    messagebox.showerror("Erro", f"Erro ao baixar o modelo: {e}")
+                janela_progresso.destroy()
+
+        def cancelar_download_fn():
+            nonlocal cancelar_download
+            cancelar_download = True
             janela_progresso.destroy()
-            janela_qualidade.destroy()
-        except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao baixar o modelo: {e}")
-            janela_progresso.destroy()
+
+        btn_cancelar = ttk.Button(janela_progresso, text="Cancelar Download", command=cancelar_download_fn)
+        btn_cancelar.pack(pady=10)
+
+        janela_progresso.protocol("WM_DELETE_WINDOW", cancelar_download_fn)
+
+        Thread(target=baixar_modelo_thread).start()
 
     btn_baixar = ttk.Button(janela_qualidade, text="Baixar Modelo", command=baixar_modelo)
     btn_baixar.pack(pady=10)
+
+    def selecionar_modelo_local():
+        selecionar_modelo()
+
+    btn_modelo_local = ttk.Button(janela_qualidade, text="Selecionar Modelo localmente", command=selecionar_modelo_local)
+    btn_modelo_local.pack(pady=10)
 
 root = tk.Tk()
 root.title("TextifyVoice [ Beta ] by@felipe.sh")
@@ -399,7 +436,7 @@ frame.pack(expand=True, fill=tk.BOTH, padx=20, pady=20)
 
 text_var = tk.StringVar()
 text_var.set("Selecione os arquivos MP4 para transcrever.")
-text_label = ttk.Label(frame, textvariable=text_var, wraplength=550, style="TLabel")
+text_label = ttk.Label(frame, textvariable=text_var, wraplength=650, style="TLabel")
 text_label.pack()
 
 model_path = config.get('model_path')
@@ -407,18 +444,16 @@ model_path_var = tk.StringVar(value=model_path)
 
 btn_abrir = ttk.Button(frame, text="Abrir Pasta de Documentos Transcritos", state=tk.DISABLED, style="TButton")
 btn_select = ttk.Button(frame, text="Selecionar Arquivos", style="TButton")
-btn_modelo = ttk.Button(frame, text="Selecionar Modelo", command=selecionar_modelo, style="Modelo.TButton")
 btn_qualidade = ttk.Button(frame, text="Selecionar Qualidade", command=selecionar_qualidade, style="Modelo.TButton")
 
-def iniciar_processo(btn_abrir, btn_select, btn_modelo):
-    filepaths = selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, model_path_var.get())
+def iniciar_processo(btn_abrir, btn_select):
+    filepaths = selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, model_path_var.get())
     if filepaths:
-        iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, btn_modelo, model_path_var.get())
+        iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, model_path_var.get())
 
-btn_select.config(command=lambda: iniciar_processo(btn_abrir, btn_select, btn_modelo))
+btn_select.config(command=lambda: iniciar_processo(btn_abrir, btn_select))
 btn_select.pack(pady=(10, 0))
 btn_abrir.pack(pady=(10, 20))
-btn_modelo.pack(pady=(10, 0))
 btn_qualidade.pack(pady=(10, 0))
 
 root.after(100, verificar_modelo_inicial)
