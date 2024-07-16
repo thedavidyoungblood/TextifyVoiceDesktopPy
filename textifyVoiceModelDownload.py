@@ -1,7 +1,7 @@
 import logging
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from threading import Thread
+from threading import Thread, Event
 from logging.handlers import RotatingFileHandler
 import whisper
 import warnings
@@ -51,6 +51,8 @@ def configurar_logger():
 configurar_logger()
 
 cancelar_desgravacao = False
+threads = []
+stop_event = Event()
 
 def extrair_audio(filepath, temp_dir):
     try:
@@ -75,7 +77,7 @@ def extrair_audio(filepath, temp_dir):
         logging.error(f"Erro ao extrair áudio com ffmpeg: {e.stderr.decode()}")
         raise
 
-def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path):
+def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_qualidade, model_path):
     global cancelar_desgravacao
 
     try:
@@ -98,10 +100,11 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
         logging.info(f"Analisando arquivo: {filepath}")
         text_var.set("Processando arquivos...")
 
-        if cancelar_desgravacao:
+        if cancelar_desgravacao or stop_event.is_set():
             text_var.set("Desgravação cancelada. Selecione arquivos para começar.")
             btn_select.config(text="Selecionar Arquivos",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select))
+                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
+            btn_qualidade.config(state=tk.NORMAL)
             cancelar_desgravacao = False
             logging.info("Desgravação cancelada pelo usuário.")
             return
@@ -137,7 +140,8 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
             cancelar_desgravacao = True
             text_var.set(f"Erro no desgravando {nome_arquivo}.")
             btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select))
+                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
+            btn_qualidade.config(state=tk.NORMAL)
             notification.notify(
                 title="Erro na Transcrição",
                 message=f"O arquivo {filepath} não foi encontrado.",
@@ -151,7 +155,8 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
             cancelar_desgravacao = True
             text_var.set(f"Erro no desgravando {nome_arquivo}.")
             btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select))
+                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
+            btn_qualidade.config(state=tk.NORMAL)
             notification.notify(
                 title="Erro na Transcrição",
                 message=f"Permissão negada para acessar o arquivo {filepath}.",
@@ -165,7 +170,8 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
             cancelar_desgravacao = True
             text_var.set(f"Erro no desgravando {nome_arquivo}.")
             btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select))
+                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
+            btn_qualidade.config(state=tk.NORMAL)
             notification.notify(
                 title="Erro na Transcrição",
                 message=f"O arquivo {filepath} não contém uma faixa de áudio.",
@@ -179,7 +185,8 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
             cancelar_desgravacao = True
             text_var.set(f"Erro no desgravando {nome_arquivo}.")
             btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select))
+                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
+            btn_qualidade.config(state=tk.NORMAL)
             notification.notify(
                 title="Erro na Transcrição",
                 message=f"Ocorreu um erro ao transcrever {nome_arquivo}.",
@@ -190,8 +197,9 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path
 
     text_var.set("Todas as transcrições foram concluídas.")
     btn_select.config(text="Selecionar Arquivos",
-                      command=lambda: iniciar_processo(btn_abrir, btn_select))
+                      command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
     btn_abrir.config(state=tk.NORMAL, command=lambda: abrir_local_salvamento(filepaths))
+    btn_qualidade.config(state=tk.NORMAL)
 
     logging.info("Todas as transcrições foram concluídas com sucesso.")
     notification.notify(
@@ -207,10 +215,12 @@ def abrir_local_salvamento(filepaths):
         webbrowser.open(diretorio)
         logging.info(f"Abrindo diretório de salvamento: {diretorio}")
 
-def iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, model_path):
-    Thread(target=lambda: extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, model_path)).start()
+def iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, btn_qualidade, model_path):
+    thread = Thread(target=lambda: extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_qualidade, model_path))
+    threads.append(thread)
+    thread.start()
 
-def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, model_path):
+def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_qualidade, model_path):
     global cancelar_desgravacao
     filepaths = filedialog.askopenfilenames(title="Escolher os vídeos que serão transcritos para texto",
                                             filetypes=[("Arquivos Selecionáveis", "*.mp4;*.mp3;*.wav;*.mkv"),("MP4 files", "*.mp4",), ("MP3 files", "*.mp3"),("WAV files", "*.wav")])
@@ -222,15 +232,17 @@ def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, model_path):
     filepaths = [filepath.replace("/", "\\") for filepath in filepaths] 
 
     text_var.set(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
-    btn_select.config(text="Cancelar desgravação", command=lambda: cancelar_desgravacao_fn(btn_select))
+    btn_select.config(text="Cancelar desgravação", command=lambda: cancelar_desgravacao_fn(btn_select, btn_qualidade))
     btn_abrir.config(state=tk.DISABLED)
+    btn_qualidade.config(state=tk.DISABLED)
     logging.info(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
     return filepaths
 
-def cancelar_desgravacao_fn(btn_select):
+def cancelar_desgravacao_fn(btn_select, btn_qualidade):
     global cancelar_desgravacao
     cancelar_desgravacao = True
-    btn_select.config(text="Selecionar Arquivos", command=lambda: iniciar_processo(btn_abrir, btn_select))
+    btn_select.config(text="Selecionar Arquivos", command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
+    btn_qualidade.config(state=tk.NORMAL)
     text_var.set("Cancelamento em processo...")
     logging.info("Processo de desgravação cancelado pelo usuário.")
 
@@ -385,8 +397,6 @@ def selecionar_qualidade():
         btn_cancelar = ttk.Button(janela_progresso, text="Cancelar Download", command=cancelar_download_fn)
         btn_cancelar.pack(pady=10)
 
-        janela_progresso.protocol("WM_DELETE_WINDOW", cancelar_download_fn)
-
         Thread(target=baixar_modelo_thread).start()
 
     btn_baixar = ttk.Button(janela_qualidade, text="Baixar Modelo", command=baixar_modelo)
@@ -446,15 +456,25 @@ btn_abrir = ttk.Button(frame, text="Abrir Pasta de Documentos Transcritos", stat
 btn_select = ttk.Button(frame, text="Selecionar Arquivos", style="TButton")
 btn_qualidade = ttk.Button(frame, text="Selecionar Qualidade", command=selecionar_qualidade, style="Modelo.TButton")
 
-def iniciar_processo(btn_abrir, btn_select):
-    filepaths = selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, model_path_var.get())
+def iniciar_processo(btn_abrir, btn_select, btn_qualidade):
+    filepaths = selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_qualidade, model_path_var.get())
     if filepaths:
-        iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, model_path_var.get())
+        iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, btn_qualidade, model_path_var.get())
 
-btn_select.config(command=lambda: iniciar_processo(btn_abrir, btn_select))
+btn_select.config(command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
 btn_select.pack(pady=(10, 0))
 btn_abrir.pack(pady=(10, 20))
 btn_qualidade.pack(pady=(10, 0))
+
+def on_closing():
+    global cancelar_desgravacao
+    cancelar_desgravacao = True
+    stop_event.set()
+    for thread in threads:
+        thread.join()
+    root.destroy()
+
+root.protocol("WM_DELETE_WINDOW", on_closing)
 
 root.after(100, verificar_modelo_inicial)
 
