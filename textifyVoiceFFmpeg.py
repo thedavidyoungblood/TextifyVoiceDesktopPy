@@ -1,17 +1,18 @@
-import os
 import logging
-from logging.handlers import RotatingFileHandler
-from docx import Document
 import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+from threading import Thread
+from logging.handlers import RotatingFileHandler
+import whisper
+import warnings
+import os
+from docx import Document
+import webbrowser
 from plyer import notification
 import winsound
-import whisper
-from threading import Thread
-import webbrowser
-from tkinter import filedialog, messagebox, ttk
+import ffmpeg
 import json
 import subprocess
-import warnings
 
 warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
 warnings.filterwarnings("ignore", category=UserWarning, message="FP16 is not supported on CPU; using FP32 instead")
@@ -50,20 +51,30 @@ configurar_logger()
 
 cancelar_desgravacao = False
 
-def extrair_audio(filepath, output_path):
+def extrair_audio(filepath, temp_dir):
     try:
+        # Verifica se o arquivo já é um formato de áudio suportado
+        if filepath.lower().endswith(('.mp3', '.wav', '.aac', '.flac', '.m4a', '.ogg')):
+            logging.info(f"O arquivo {filepath} já é um formato de áudio suportado. Não é necessário extrair o áudio.")
+            return filepath
+        
         logging.info(f"Extraindo áudio do vídeo: {filepath}")
-        si = subprocess.STARTUPINFO()
-        si.dwFlags = subprocess.STARTF_USESHOWWINDOW
-        si.wShowWindow = subprocess.SW_HIDE
-        ffmpeg_path = os.path.join('.', 'ffmpeg', 'ffmpeg.exe')
-        ffmpeg_path = os.path.abspath(ffmpeg_path)
-        command = f'{ffmpeg_path} -i "{filepath}" "{output_path}" -y'
-        subprocess.run(command, shell=True, check=True,startupinfo=si)
+        
+        # Define o caminho do arquivo temporário de áudio
+        output_path = os.path.join(temp_dir, "temp_audio.aac")
+        
+        # Executa o comando FFmpeg usando a biblioteca ffmpeg-python
+        (
+            ffmpeg
+            .input(filepath)
+            .output(output_path, acodec='aac')
+            .run(capture_stdout=True, capture_stderr=True)
+        )
         
         logging.info(f"Áudio extraído com sucesso para: {output_path}")
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Erro ao extrair áudio com ffmpeg: {e}")
+        return output_path
+    except ffmpeg.Error as e:
+        logging.error(f"Erro ao extrair áudio com ffmpeg: {e.stderr.decode()}")
         raise
 
 def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo, model_path):
@@ -107,13 +118,12 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
             if not os.path.exists(filepath):
                 raise FileNotFoundError(f"O arquivo {filepath} não foi encontrado.")
 
-            audio_temp_path = os.path.join(temp_dir, nome_arquivo + "_audio.wav")
-            extrair_audio(filepath, audio_temp_path)
+            audio_path = extrair_audio(filepath, temp_dir)
 
             text_var.set(f"Desgravando: {nome_arquivo} ⏳ Por favor, aguarde.")
-            logging.info(f"Iniciando transcrição do arquivo: {audio_temp_path}")
+            logging.info(f"Iniciando transcrição do arquivo: {audio_path}")
 
-            result = model.transcribe(audio_temp_path, language="pt")
+            result = model.transcribe(audio_path, language="pt")
             doc = Document()
             for segment in result["segments"]:
                 text = segment["text"]
@@ -122,8 +132,8 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
             doc.save(local_salvamento)
             logging.info(f"Transcrição concluída salva em: {local_salvamento}")
 
-           
-            os.remove(audio_temp_path)
+            if audio_path != filepath:
+                os.remove(audio_path)
 
         except FileNotFoundError as fnf_error:
             logging.error(f"Erro ao transcrever (fnf_error) {nome_arquivo}. Motivo: {fnf_error}")

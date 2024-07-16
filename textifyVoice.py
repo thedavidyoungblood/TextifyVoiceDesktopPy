@@ -13,6 +13,8 @@ import winsound
 import ffmpeg
 import json
 import subprocess
+import tqdm
+import urllib.request
 
 warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
 warnings.filterwarnings("ignore", category=UserWarning, message="FP16 is not supported on CPU; using FP32 instead")
@@ -290,6 +292,75 @@ def verificar_modelo_inicial():
     else:
         selecionar_modelo()
 
+def selecionar_qualidade():
+    janela_qualidade = tk.Toplevel()
+    janela_qualidade.title("Selecionar Qualidade")
+    janela_qualidade.geometry("400x300")
+    janela_qualidade.grab_set()
+
+    label = ttk.Label(janela_qualidade, text="Escolha um dos modelos de transcrição da lista abaixo e faça o download do arquivo correspondente:")
+    label.pack(pady=10)
+
+    modelos = {
+        "medium": "https://openaipublic.azureedge.net/main/whisper/models/345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/medium.pt",
+        "large-v1": "https://openaipublic.azureedge.net/main/whisper/models/e4b87e7e0bf463eb8e6956e646f1e277e901512310def2c24bf0e11bd3c28e9a/large-v1.pt",
+        "large-v2": "https://openaipublic.azureedge.net/main/whisper/models/81f7c96c852ee8fc832187b0132e569d6c3065a3252ed18e56effd0b6a73e524/large-v2.pt",
+        "large-v3": "https://openaipublic.azureedge.net/main/whisper/models/e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/large-v3.pt",
+        "large": "https://openaipublic.azureedge.net/main/whisper/models/e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/large-v3.pt"
+    }
+
+    qualidade_var = tk.StringVar(value="medium")
+
+    drop_down = ttk.OptionMenu(janela_qualidade, qualidade_var, *modelos.keys())
+    drop_down.pack(pady=10)
+
+    def baixar_modelo():
+        modelo_selecionado = qualidade_var.get()
+        url = modelos[modelo_selecionado]
+        diretorio_modelo = ".model/"
+        if not os.path.exists(diretorio_modelo):
+            os.makedirs(diretorio_modelo)
+        caminho_modelo = os.path.join(diretorio_modelo, f"{modelo_selecionado}.pt")
+
+        janela_progresso = tk.Toplevel()
+        janela_progresso.title("Baixando Modelo")
+        janela_progresso.geometry("400x100")
+        janela_progresso.grab_set()
+
+        progresso_var = tk.DoubleVar()
+        barra_progresso = ttk.Progressbar(janela_progresso, variable=progresso_var, maximum=100)
+        barra_progresso.pack(pady=20, padx=20, fill=tk.X)
+
+        def hook(t):
+            last_b = [0]
+
+            def inner(b=1, bsize=1, tsize=None):
+                if tsize is not None:
+                    t.total = tsize
+                t.update((b - last_b[0]) * bsize)
+                last_b[0] = b
+                progresso_var.set(t.n / t.total * 100)
+
+            return inner
+
+        try:
+            with tqdm.tqdm(unit='B', unit_scale=True, unit_divisor=1024, miniters=1, desc=f"Downloading {modelo_selecionado}.pt") as t:
+                urllib.request.urlretrieve(url, caminho_modelo, reporthook=hook(t))
+
+            config['model_path'] = caminho_modelo
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump(config, f)
+            model_path_var.set(caminho_modelo)
+            messagebox.showinfo("Sucesso", "Modelo baixado e caminho salvo com sucesso!")
+            janela_progresso.destroy()
+            janela_qualidade.destroy()
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao baixar o modelo: {e}")
+            janela_progresso.destroy()
+
+    btn_baixar = ttk.Button(janela_qualidade, text="Baixar Modelo", command=baixar_modelo)
+    btn_baixar.pack(pady=10)
+
 root = tk.Tk()
 root.title("TextifyVoice [ Beta ] by@felipe.sh")
 
@@ -337,6 +408,7 @@ model_path_var = tk.StringVar(value=model_path)
 btn_abrir = ttk.Button(frame, text="Abrir Pasta de Documentos Transcritos", state=tk.DISABLED, style="TButton")
 btn_select = ttk.Button(frame, text="Selecionar Arquivos", style="TButton")
 btn_modelo = ttk.Button(frame, text="Selecionar Modelo", command=selecionar_modelo, style="Modelo.TButton")
+btn_qualidade = ttk.Button(frame, text="Selecionar Qualidade", command=selecionar_qualidade, style="Modelo.TButton")
 
 def iniciar_processo(btn_abrir, btn_select, btn_modelo):
     filepaths = selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_modelo, model_path_var.get())
@@ -347,6 +419,7 @@ btn_select.config(command=lambda: iniciar_processo(btn_abrir, btn_select, btn_mo
 btn_select.pack(pady=(10, 0))
 btn_abrir.pack(pady=(10, 20))
 btn_modelo.pack(pady=(10, 0))
+btn_qualidade.pack(pady=(10, 0))
 
 root.after(100, verificar_modelo_inicial)
 
