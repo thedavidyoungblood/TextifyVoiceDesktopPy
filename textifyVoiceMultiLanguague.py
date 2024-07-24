@@ -57,7 +57,7 @@ def extrair_audio(filepath, output_path):
     try:
         logging.info(f"Extraindo áudio do vídeo: {filepath}")
         # Caminho para o executável do FFmpeg dentro da pasta da aplicação
-        ffmpeg_path = os.path.join('.', 'ffmpeg', 'ffmpeg.exe')
+        ffmpeg_path = os.path.join('.', 'bin', 'ffmpeg.exe')
         
         command = [
             ffmpeg_path,

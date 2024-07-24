@@ -10,9 +10,23 @@ from docx import Document
 import webbrowser
 from plyer import notification
 import winsound
-import ffmpeg
 import json
+from platform import system
 import subprocess
+
+# Classe personalizada para evitar a abertura de janelas de console no Windows
+class NoConsolePopen(subprocess.Popen):
+    """
+    A custom Popen class that disables creation of a console window in Windows.
+    """
+    def __init__(self, args, **kwargs):
+        if system() == 'Windows' and 'startupinfo' not in kwargs:
+            kwargs['startupinfo'] = subprocess.STARTUPINFO()
+            kwargs['startupinfo'].dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        super().__init__(args, **kwargs)
+
+# Substituindo subprocess.Popen pela classe personalizada
+subprocess.Popen = NoConsolePopen
 
 warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
 warnings.filterwarnings("ignore", category=UserWarning, message="FP16 is not supported on CPU; using FP32 instead")
@@ -62,23 +76,27 @@ def extrair_audio(filepath, temp_dir):
         
         # Define o caminho do arquivo temporário de áudio
         output_path = os.path.join(temp_dir, "temp_audio.aac")
+        output_path = os.path.abspath(output_path)  
         
-        # Executa o comando FFmpeg usando a biblioteca ffmpeg-python
-        (
-            ffmpeg
-            .input(filepath)
-            .output(output_path, acodec='aac')
-            .run(capture_stdout=True, capture_stderr=True)
-        )
+        # Executa o comando FFmpeg usando subprocess
+        command = ['ffmpeg', '-i', filepath, '-acodec', 'aac', output_path, '-y']
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        logging.info(f"FFmpeg output: {result}")
+
+        if result.returncode != 0:
+            logging.error(f"Erro ao extrair áudio com ffmpeg: {result.stderr.decode()}")
+            raise subprocess.CalledProcessError(result.returncode, command, output=result.stdout, stderr=result.stderr)
         
         logging.info(f"Áudio extraído com sucesso para: {output_path}")
         return output_path
-    except ffmpeg.Error as e:
+    except subprocess.CalledProcessError as e:
         logging.error(f"Erro ao extrair áudio com ffmpeg: {e.stderr.decode()}")
         raise
 
 def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo, model_path):
     global cancelar_desgravacao
+
+    result = None  # Inicializa a variável result
 
     try:
         logging.info(f"Tentando carregar o modelo do caminho: {model_path}")
@@ -120,10 +138,15 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo
 
             audio_path = extrair_audio(filepath, temp_dir)
 
+            # Verifique se o arquivo de áudio foi realmente criado
+            if not os.path.exists(audio_path):
+                raise FileNotFoundError(f"O arquivo de áudio extraído não foi encontrado: {audio_path}")
+
             text_var.set(f"Desgravando: {nome_arquivo} ⏳ Por favor, aguarde.")
             logging.info(f"Iniciando transcrição do arquivo: {audio_path}")
 
             result = model.transcribe(audio_path, language="pt")
+
             doc = Document()
             for segment in result["segments"]:
                 text = segment["text"]
