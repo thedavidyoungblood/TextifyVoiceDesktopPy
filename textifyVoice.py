@@ -74,11 +74,10 @@ def extrair_audio(filepath, temp_dir):
         
         logging.info(f"Extraindo áudio do vídeo: {filepath}")
         
-        # Define o caminho do arquivo temporário de áudio
-        output_path = os.path.join(temp_dir, "temp_audio.aac")
+        
+        output_path = os.path.join(temp_dir, "temp_audio.aac") # ./temp/temp_audio.acc
         output_path = os.path.abspath(output_path)  
         
-        # Executa o comando FFmpeg usando subprocess
         command = ['ffmpeg', '-i', filepath, '-acodec', 'aac', output_path, '-y']
         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         logging.info(f"FFmpeg output: {result}")
@@ -96,7 +95,7 @@ def extrair_audio(filepath, temp_dir):
 def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_modelo, model_path):
     global cancelar_desgravacao
 
-    result = None  # Inicializa a variável result
+    result = None  
 
     try:
         logging.info(f"Tentando carregar o modelo do caminho: {model_path}")
