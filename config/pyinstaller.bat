@@ -3,7 +3,7 @@
 
 echo "Iniciando o processo de build com PyInstaller..."
 
-pyinstaller --windowed --hidden-import=whisper --icon=./bin/icon.ico textifyVoice.py
+pyinstaller --windowed --hidden-import=whisper --icon=./bin/icon.ico textifyVoiceFFmpeg.py
 pyinstaller --add-data "path/to/icon.ico;./bin" --add-data "path/to/config.json;." your_script.py
 
 if [ $? -eq 0 ]; then
