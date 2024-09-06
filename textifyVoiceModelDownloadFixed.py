@@ -114,6 +114,7 @@ def extrair_e_transcrever(filepaths, text_var, progresso_var, btn_abrir, btn_sel
         local_salvamento = local_salvamento.replace("/", "\\") 
         logging.info(f"Transcrição será salva em: {local_salvamento}")
 
+
         try:
             if not os.path.exists(filepath):
                 raise FileNotFoundError(f"O arquivo {filepath} não foi encontrado.")
