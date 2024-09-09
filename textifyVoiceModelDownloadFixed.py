@@ -28,8 +28,11 @@ if not os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(DEFAULT_CONFIG, f, indent=4)
     logging.info(f"Arquivo de configuração criado: {CONFIG_FILE}")
-
+# Global Variables
 config = {}
+cancelar_desgravacao = False
+threads = []
+stop_event = Event()
 try:
     with open(CONFIG_FILE, 'r') as f:
         config = json.load(f)
@@ -47,12 +50,6 @@ def configurar_logger():
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     logger.addHandler(log_handler)
-
-configurar_logger()
-
-cancelar_desgravacao = False
-threads = []
-stop_event = Event()
 
 def extrair_audio(filepath, temp_dir):
     try:
@@ -413,6 +410,21 @@ def selecionar_qualidade():
     def selecionar_modelo_local():
         selecionar_modelo()
 
+def iniciar_processo(btn_abrir, btn_select, btn_qualidade):
+    filepaths = selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_qualidade, model_path_var.get())
+    if filepaths:
+        iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, btn_qualidade, model_path_var.get())
+
+def on_closing():
+    global cancelar_desgravacao
+    cancelar_desgravacao = True
+    stop_event.set()
+    for thread in threads:
+        thread.join()
+    root.destroy()
+
+configurar_logger()
+
 root = tk.Tk()
 root.title("TextifyVoice [ Beta ] by@felipe.sh")
 
@@ -461,23 +473,11 @@ btn_abrir = ttk.Button(frame, text="Abrir Pasta de Documentos Transcritos", stat
 btn_select = ttk.Button(frame, text="Selecionar Arquivos", style="TButton")
 btn_qualidade = ttk.Button(frame, text="Selecionar Qualidade", command=selecionar_qualidade, style="Modelo.TButton")
 
-def iniciar_processo(btn_abrir, btn_select, btn_qualidade):
-    filepaths = selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_qualidade, model_path_var.get())
-    if filepaths:
-        iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, btn_qualidade, model_path_var.get())
 
 btn_select.config(command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
 btn_select.pack(pady=(10, 0))
 btn_abrir.pack(pady=(10, 20))
 btn_qualidade.pack(pady=(10, 0))
-
-def on_closing():
-    global cancelar_desgravacao
-    cancelar_desgravacao = True
-    stop_event.set()
-    for thread in threads:
-        thread.join()
-    root.destroy()
 
 root.protocol("WM_DELETE_WINDOW", on_closing)
 
