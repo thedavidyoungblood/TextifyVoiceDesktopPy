@@ -77,7 +77,7 @@ def extrair_audio(filepath, temp_dir):
         logging.error(f"Erro ao extrair áudio com ffmpeg: {e.stderr.decode()}")
         raise
 
-def extrair_e_transcrever(filepaths, text_var, progresso_var, btn_abrir, btn_select, btn_qualidade, model_path):
+def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_qualidade, model_path):
     global cancelar_desgravacao
 
     try:
@@ -130,13 +130,11 @@ def extrair_e_transcrever(filepaths, text_var, progresso_var, btn_abrir, btn_sel
             result = model.transcribe(audio_path, language="pt")
 
             total_segments = len(result["segments"])
-            progresso_var.set(0)
 
             doc = Document()
             for i, segment in enumerate(result["segments"]):
                 text = segment["text"]
                 doc.add_paragraph(text)
-                progresso_var.set((i + 1) / total_segments * 100)
 
             doc.save(local_salvamento)
             logging.info(f"Transcrição concluída salva em: {local_salvamento}")
@@ -205,7 +203,6 @@ def extrair_e_transcrever(filepaths, text_var, progresso_var, btn_abrir, btn_sel
             return
 
     text_var.set("Todas as transcrições foram concluídas.")
-    progresso_var.set(100)
     btn_select.config(text="Selecionar Arquivos",
                       command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
     btn_abrir.config(state=tk.NORMAL, command=lambda: abrir_local_salvamento(filepaths))
@@ -225,12 +222,12 @@ def abrir_local_salvamento(filepaths):
         webbrowser.open(diretorio)
         logging.info(f"Abrindo diretório de salvamento: {diretorio}")
 
-def iniciar_transcricao_thread(filepaths, text_var, progresso_var, btn_abrir, btn_select, btn_qualidade, model_path):
-    thread = Thread(target=lambda: extrair_e_transcrever(filepaths, text_var, progresso_var, btn_abrir, btn_select, btn_qualidade, model_path))
+def iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, btn_qualidade, model_path):
+    thread = Thread(target=lambda: extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_qualidade, model_path))
     threads.append(thread)
     thread.start()
 
-def selecionar_arquivo_e_salvar(text_var, progresso_var, btn_select, btn_abrir, btn_qualidade, model_path):
+def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_qualidade, model_path):
     global cancelar_desgravacao
     filepaths = filedialog.askopenfilenames(title="Escolher os vídeos que serão transcritos para texto",
                                             filetypes=[("Arquivos Selecionáveis", "*.mp4;*.mp3;*.wav;*.mkv"),("MP4 files", "*.mp4",), ("MP3 files", "*.mp3"),("WAV files", "*.wav")])
@@ -242,7 +239,6 @@ def selecionar_arquivo_e_salvar(text_var, progresso_var, btn_select, btn_abrir, 
     filepaths = [filepath.replace("/", "\\") for filepath in filepaths] 
 
     text_var.set(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
-    progresso_var.set(0)  # Resetar a barra de progresso
     btn_select.config(text="Cancelar desgravação", command=lambda: cancelar_desgravacao_fn(btn_select, btn_qualidade))
     btn_abrir.config(state=tk.DISABLED)
     btn_qualidade.config(state=tk.DISABLED)
@@ -458,10 +454,6 @@ text_var.set("Selecione os arquivos MP4 para transcrever.")
 text_label = ttk.Label(frame, textvariable=text_var, wraplength=650, style="TLabel")
 text_label.pack()
 
-progresso_var = tk.DoubleVar()
-barra_progresso = ttk.Progressbar(frame, variable=progresso_var, maximum=100)
-barra_progresso.pack(pady=(10, 0), padx=20, fill=tk.X)
-
 model_path = config.get('model_path')
 model_path_var = tk.StringVar(value=model_path)
 
@@ -470,9 +462,9 @@ btn_select = ttk.Button(frame, text="Selecionar Arquivos", style="TButton")
 btn_qualidade = ttk.Button(frame, text="Selecionar Qualidade", command=selecionar_qualidade, style="Modelo.TButton")
 
 def iniciar_processo(btn_abrir, btn_select, btn_qualidade):
-    filepaths = selecionar_arquivo_e_salvar(text_var, progresso_var, btn_select, btn_abrir, btn_qualidade, model_path_var.get())
+    filepaths = selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_qualidade, model_path_var.get())
     if filepaths:
-        iniciar_transcricao_thread(filepaths, text_var, progresso_var, btn_abrir, btn_select, btn_qualidade, model_path_var.get())
+        iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, btn_qualidade, model_path_var.get())
 
 btn_select.config(command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
 btn_select.pack(pady=(10, 0))
