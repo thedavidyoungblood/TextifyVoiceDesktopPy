@@ -391,6 +391,9 @@ def selecionar_qualidade():
             cancelar_download = True
             janela_progresso.destroy()
 
+        # Adicionando o protocolo para fechar a janela de download
+        janela_progresso.protocol("WM_DELETE_WINDOW", cancelar_download_fn)
+
         btn_cancelar = ttk.Button(janela_progresso, text="Cancelar Download", command=cancelar_download_fn)
         btn_cancelar.pack(pady=10)
 
@@ -513,6 +516,9 @@ def abrir_janela_selecao_arquivos():
     btn_adicionar.config(command=lambda: adicionar_arquivo(lista_arquivos))
     btn_iniciar.config(command=lambda: iniciar_transcricao(lista_arquivos, btn_iniciar, btn_adicionar))
     btn_cancelar.config(command=cancelar_transcricao)
+
+    # Adicionando o protocolo para fechar a janela de transcrição
+    janela_selecao.protocol("WM_DELETE_WINDOW", cancelar_transcricao)
 
     # Evento para minimizar a janela principal quando a janela de seleção for minimizada
     def on_iconify(event):
