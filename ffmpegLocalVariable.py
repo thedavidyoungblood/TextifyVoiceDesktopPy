@@ -14,6 +14,7 @@ import ffmpeg
 import json
 import tqdm
 import urllib.request
+import time  # Import necessário para pausas
 
 warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
 warnings.filterwarnings("ignore", category=UserWarning, message="FP16 is not supported on CPU; using FP32 instead")
@@ -28,7 +29,8 @@ if not os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(DEFAULT_CONFIG, f, indent=4)
     logging.info(f"Arquivo de configuração criado: {CONFIG_FILE}")
-# Global Variables
+
+# Variáveis Globais
 config = {}
 cancelar_desgravacao = False
 threads = []
@@ -74,17 +76,21 @@ def extrair_audio(filepath, temp_dir):
         logging.error(f"Erro ao extrair áudio com ffmpeg: {e.stderr.decode()}")
         raise
 
-def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_qualidade, model_path):
+def extrair_e_transcrever_arquivo(filepath, item, lista_arquivos):
     global cancelar_desgravacao
 
+    if cancelar_desgravacao:
+        return
+
     try:
+        model_path = config.get('model_path')
         logging.info(f"Tentando carregar o modelo do caminho: {model_path}")
         model = whisper.load_model(model_path)
         if model:
             logging.info(f"Modelo de transcrição carregado com sucesso")
     except Exception as e:
         logging.error(f"Erro ao carregar o modelo de transcrição: {e}")
-        text_var.set(f"Erro ao carregar o modelo. Verifique o caminho.")
+        lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Erro no modelo'))
         return
 
     temp_dir = "./temp"
@@ -92,163 +98,149 @@ def extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_qualid
         os.makedirs(temp_dir)
         logging.info(f"Diretório temporário criado: {temp_dir}")
 
-    for filepath in filepaths:
-        filepath = filepath.replace("/", "\\") 
-        logging.info(f"Analisando arquivo: {filepath}")
-        text_var.set("Processando arquivos...")
+    filepath = filepath.replace("/", "\\") 
+    logging.info(f"Analisando arquivo: {filepath}")
 
-        if cancelar_desgravacao or stop_event.is_set():
-            text_var.set("Desgravação cancelada. Selecione arquivos para começar.")
-            btn_select.config(text="Selecionar Arquivos",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
-            btn_qualidade.config(state=tk.NORMAL)
-            cancelar_desgravacao = False
-            logging.info("Desgravação cancelada pelo usuário.")
+    nome_arquivo = os.path.splitext(os.path.basename(filepath))[0]
+    local_salvamento = os.path.join(os.path.dirname(filepath), nome_arquivo + "_text.docx")
+    local_salvamento = local_salvamento.replace("/", "\\") 
+    logging.info(f"Transcrição será salva em: {local_salvamento}")
+
+    try:
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"O arquivo {filepath} não foi encontrado.")
+
+        audio_path = extrair_audio(filepath, temp_dir)
+
+        if not audio_path:
+            raise Exception(f"Erro ao extrair áudio do arquivo {filepath}")
+
+        logging.info(f"Iniciando transcrição do arquivo: {audio_path}")
+
+        lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Em processo...'))
+
+        # Iniciar a transcrição em uma thread separada para permitir o cancelamento
+        transcription_result = [None]
+        transcription_thread = Thread(target=lambda: transcription_result.__setitem__(0, model.transcribe(audio_path, language="pt")))
+        transcription_thread.start()
+
+        # Monitorar a thread de transcrição para cancelamento
+        while transcription_thread.is_alive():
+            if cancelar_desgravacao:
+                # O cancelamento será efetivo após o término da transcrição atual
+                break
+            time.sleep(0.1)  # Evitar uso excessivo de CPU
+
+        transcription_thread.join()
+
+        if cancelar_desgravacao:
+            # Excluir arquivo parcialmente transcrito, se existir
+            if os.path.exists(local_salvamento):
+                os.remove(local_salvamento)
+                logging.info(f"Arquivo parcialmente transcrito excluído: {local_salvamento}")
+            lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Cancelado'))
             return
 
-        nome_arquivo = os.path.splitext(os.path.basename(filepath))[0]
-        local_salvamento = os.path.join(os.path.dirname(filepath), nome_arquivo + "_text.docx")
-        local_salvamento = local_salvamento.replace("/", "\\") 
-        logging.info(f"Transcrição será salva em: {local_salvamento}")
+        result = transcription_result[0]
+        total_segments = len(result["segments"])
 
+        doc = Document()
+        for i, segment in enumerate(result["segments"]):
+            text = segment["text"]
+            doc.add_paragraph(text)
 
-        try:
-            if not os.path.exists(filepath):
-                raise FileNotFoundError(f"O arquivo {filepath} não foi encontrado.")
+        doc.save(local_salvamento)
+        logging.info(f"Transcrição concluída salva em: {local_salvamento}")
 
-            audio_path = extrair_audio(filepath, temp_dir)
+        if audio_path != filepath:
+            os.remove(audio_path)
 
-            if not audio_path:
-                raise Exception(f"Erro ao extrair áudio do arquivo {filepath}")
+        lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Finalizado'))
+        # Salvar o caminho do arquivo transcrito nos dados do item
+        lista_arquivos.item(item, values=(filepath, 'Finalizado', local_salvamento))
 
-            text_var.set(f"Desgravando: {nome_arquivo} ⏳ Por favor, aguarde.")
-            logging.info(f"Iniciando transcrição do arquivo: {audio_path}")
+    except Exception as e:
+        logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {e}")
+        lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Erro'))
 
-            result = model.transcribe(audio_path, language="pt")
+def transcrever_arquivos_em_fila(lista_arquivos, btn_iniciar, btn_adicionar):
+    global cancelar_desgravacao
+    items = lista_arquivos.get_children()
+    if not items:
+        messagebox.showwarning("Aviso", "Nenhum arquivo selecionado para transcrição.")
+        btn_iniciar.config(state=tk.NORMAL)
+        btn_adicionar.config(state=tk.NORMAL)
+        return
 
-            total_segments = len(result["segments"])
+    # Atualizar status para 'Aguardando Processo'
+    for item in items:
+        status = lista_arquivos.item(item, 'values')[1]
+        if status not in ['Finalizado', 'Cancelado', 'Erro']:
+            lista_arquivos.set(item, 'Status', 'Aguardando Processo')
 
-            doc = Document()
-            for i, segment in enumerate(result["segments"]):
-                text = segment["text"]
-                doc.add_paragraph(text)
+    for item in items:
+        if cancelar_desgravacao:
+            break
+        status = lista_arquivos.item(item, 'values')[1]
+        if status in ['Finalizado', 'Cancelado', 'Erro']:
+            continue  # Pular arquivos já processados
+        filepath = lista_arquivos.item(item, 'values')[0]
+        extrair_e_transcrever_arquivo(filepath, item, lista_arquivos)
 
-            doc.save(local_salvamento)
-            logging.info(f"Transcrição concluída salva em: {local_salvamento}")
+    # Atualizar status para 'Cancelado' nos itens restantes
+    if cancelar_desgravacao:
+        for item in items:
+            status = lista_arquivos.item(item, 'values')[1]
+            if status not in ['Finalizado', 'Erro']:
+                lista_arquivos.set(item, 'Status', 'Cancelado')
 
-            if audio_path != filepath:
-                os.remove(audio_path)
+    # Após o processamento de todos os arquivos ou cancelamento
+    btn_iniciar.config(state=tk.NORMAL)
+    btn_adicionar.config(state=tk.NORMAL)
+    if cancelar_desgravacao:
+        messagebox.showinfo("Transcrição Cancelada", "A transcrição foi cancelada pelo usuário.")
+        cancelar_desgravacao = False  # Resetar para futuras transcrições
+    else:
+        messagebox.showinfo("Transcrição Concluída", "Todas as transcrições foram concluídas.")
 
-        except FileNotFoundError as fnf_error:
-            logging.error(f"Erro ao transcrever (fnf_error) {nome_arquivo}. Motivo: {fnf_error}")
-            cancelar_desgravacao = True
-            text_var.set(f"Erro no desgravando {nome_arquivo}.")
-            btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
-            btn_qualidade.config(state=tk.NORMAL)
-            notification.notify(
-                title="Erro na Transcrição",
-                message=f"O arquivo {filepath} não foi encontrado.",
-                timeout=10
-            )
-            winsound.MessageBeep(winsound.MB_ICONHAND)
-            return
+def iniciar_transcricao(lista_arquivos, btn_iniciar, btn_adicionar):
+    global cancelar_desgravacao
+    cancelar_desgravacao = False
+    btn_iniciar.config(state=tk.DISABLED)
+    btn_adicionar.config(state=tk.DISABLED)
 
-        except PermissionError as perm_error:
-            logging.error(f"Erro ao transcrever (PermissionError) {nome_arquivo}. Motivo: {perm_error}")
-            cancelar_desgravacao = True
-            text_var.set(f"Erro no desgravando {nome_arquivo}.")
-            btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
-            btn_qualidade.config(state=tk.NORMAL)
-            notification.notify(
-                title="Erro na Transcrição",
-                message=f"Permissão negada para acessar o arquivo {filepath}.",
-                timeout=10
-            )
-            winsound.MessageBeep(winsound.MB_ICONHAND)
-            return
-
-        except ValueError as val_error:
-            logging.error(f"Erro ao transcrever (val_error) {nome_arquivo}. Motivo: {val_error}")
-            cancelar_desgravacao = True
-            text_var.set(f"Erro no desgravando {nome_arquivo}.")
-            btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
-            btn_qualidade.config(state=tk.NORMAL)
-            notification.notify(
-                title="Erro na Transcrição",
-                message=f"O arquivo {filepath} não contém uma faixa de áudio.",
-                timeout=10
-            )
-            winsound.MessageBeep(winsound.MB_ICONHAND)
-            return
-
-        except Exception as e:
-            logging.error(f"Erro ao transcrever (Generic) {nome_arquivo}. Motivo: {e}")
-            cancelar_desgravacao = True
-            text_var.set(f"Erro no desgravando {nome_arquivo}.")
-            btn_select.config(text="Selecionar Arquivos para transcrição",
-                              command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
-            btn_qualidade.config(state=tk.NORMAL)
-            notification.notify(
-                title="Erro na Transcrição",
-                message=f"Ocorreu um erro ao transcrever {nome_arquivo}.",
-                timeout=10
-            )
-            winsound.MessageBeep(winsound.MB_ICONHAND)
-            return
-
-    text_var.set("Todas as transcrições foram concluídas.")
-    btn_select.config(text="Selecionar Arquivos",
-                      command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
-    btn_abrir.config(state=tk.NORMAL, command=lambda: abrir_local_salvamento(filepaths))
-    btn_qualidade.config(state=tk.NORMAL)
-
-    logging.info("Todas as transcrições foram concluídas com sucesso.")
-    notification.notify(
-        title="Transcrição Concluída",
-        message="Todas as transcrições foram concluídas com sucesso.",
-        timeout=10
-    )
-    winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
-
-def abrir_local_salvamento(filepaths):
-    if filepaths:
-        diretorio = os.path.dirname(filepaths[0])
-        webbrowser.open(diretorio)
-        logging.info(f"Abrindo diretório de salvamento: {diretorio}")
-
-def iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, btn_qualidade, model_path):
-    thread = Thread(target=lambda: extrair_e_transcrever(filepaths, text_var, btn_abrir, btn_select, btn_qualidade, model_path))
-    threads.append(thread)
+    thread = Thread(target=transcrever_arquivos_em_fila, args=(lista_arquivos, btn_iniciar, btn_adicionar))
     thread.start()
 
-def selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_qualidade, model_path):
-    global cancelar_desgravacao
+def adicionar_arquivo(lista_arquivos):
     filepaths = filedialog.askopenfilenames(title="Escolher os vídeos que serão transcritos para texto",
-                                            filetypes=[("Arquivos Selecionáveis", "*.mp4;*.mp3;*.wav;*.mkv"),("MP4 files", "*.mp4",), ("MP3 files", "*.mp3"),("WAV files", "*.wav")])
-    if not filepaths:
-        text_var.set("Seleção de arquivo cancelada. Operação interrompida.")
-        logging.info("Seleção de arquivo cancelada pelo usuário.")
-        return None
+                                            filetypes=[("Arquivos Selecionáveis", "*.mp4;*.mp3;*.wav;*.mkv"),
+                                                       ("MP4 files", "*.mp4",), ("MP3 files", "*.mp3"), ("WAV files", "*.wav")])
+    for filepath in filepaths:
+        # Verificar se o arquivo já está na lista
+        already_exists = False
+        for item in lista_arquivos.get_children():
+            if lista_arquivos.item(item, 'values')[0] == filepath:
+                already_exists = True
+                break
+        if not already_exists:
+            # Adicionar o arquivo à Treeview com status 'Preparado'
+            lista_arquivos.insert('', 'end', values=(filepath, 'Preparado', ''))
 
-    filepaths = [filepath.replace("/", "\\") for filepath in filepaths] 
-
-    text_var.set(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
-    btn_select.config(text="Cancelar desgravação", command=lambda: cancelar_desgravacao_fn(btn_select, btn_qualidade))
-    btn_abrir.config(state=tk.DISABLED)
-    btn_qualidade.config(state=tk.DISABLED)
-    logging.info(f"{len(filepaths)} arquivo(s) selecionado(s) para transcrição.")
-    return filepaths
-
-def cancelar_desgravacao_fn(btn_select, btn_qualidade):
-    global cancelar_desgravacao
-    cancelar_desgravacao = True
-    btn_select.config(text="Selecionar Arquivos", command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
-    btn_qualidade.config(state=tk.NORMAL)
-    text_var.set("Cancelamento em processo...")
-    logging.info("Processo de desgravação cancelado pelo usuário.")
+def abrir_local_do_arquivo(event, lista_arquivos):
+    item = lista_arquivos.identify_row(event.y)
+    if item:
+        status = lista_arquivos.item(item, 'values')[1]
+        if status == 'Finalizado':
+            # Obter o caminho do arquivo transcrito
+            transcribed_file = lista_arquivos.item(item, 'values')[2]
+            if os.path.exists(transcribed_file):
+                diretorio = os.path.dirname(transcribed_file)
+                os.startfile(diretorio)
+            else:
+                messagebox.showerror("Erro", "Arquivo transcrito não encontrado.")
+        else:
+            messagebox.showinfo("Informação", "O arquivo ainda não foi transcrito.")
 
 def selecionar_modelo():
     janela_modelo = tk.Toplevel()
@@ -332,7 +324,7 @@ def selecionar_qualidade():
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(config, f)
             model_path_var.set(caminho_modelo)
-            messagebox.showinfo("Modelo já existe", "O modelo já foi baixado anteriormente.")
+            messagebox.showinfo("Modelo Status", "Modelo Selecionado.")
             janela_qualidade.destroy()
             return
 
@@ -407,14 +399,6 @@ def selecionar_qualidade():
     btn_baixar = ttk.Button(janela_qualidade, text="Selecionar Modelo", command=baixar_modelo)
     btn_baixar.pack(pady=10)
 
-    def selecionar_modelo_local():
-        selecionar_modelo()
-
-def iniciar_processo(btn_abrir, btn_select, btn_qualidade):
-    filepaths = selecionar_arquivo_e_salvar(text_var, btn_select, btn_abrir, btn_qualidade, model_path_var.get())
-    if filepaths:
-        iniciar_transcricao_thread(filepaths, text_var, btn_abrir, btn_select, btn_qualidade, model_path_var.get())
-
 def on_closing():
     global cancelar_desgravacao
     cancelar_desgravacao = True
@@ -430,7 +414,8 @@ root.title("TextifyVoice [ Beta ] by@felipe.sh")
 
 root.geometry("650x500")
 
-root.iconbitmap('./bin/icon.ico')
+# Se tiver um ícone, descomente a linha abaixo e ajuste o caminho
+# root.iconbitmap('./bin/icon.ico')
 
 cor_fundo = "#343a40"
 root.configure(bg=cor_fundo)
@@ -473,8 +458,7 @@ btn_abrir = ttk.Button(frame, text="Abrir Pasta de Documentos Transcritos", stat
 btn_select = ttk.Button(frame, text="Selecionar Arquivos", style="TButton")
 btn_qualidade = ttk.Button(frame, text="Selecionar Qualidade", command=selecionar_qualidade, style="Modelo.TButton")
 
-
-btn_select.config(command=lambda: iniciar_processo(btn_abrir, btn_select, btn_qualidade))
+btn_select.config(command=lambda: abrir_janela_selecao_arquivos())
 btn_select.pack(pady=(10, 0))
 btn_abrir.pack(pady=(10, 20))
 btn_qualidade.pack(pady=(10, 0))
@@ -482,5 +466,61 @@ btn_qualidade.pack(pady=(10, 0))
 root.protocol("WM_DELETE_WINDOW", on_closing)
 
 root.after(10, verificar_modelo_inicial)
+
+def abrir_janela_selecao_arquivos():
+    janela_selecao = tk.Toplevel()
+    janela_selecao.title("Seleção de Arquivos")
+    janela_selecao.geometry("700x400")
+    janela_selecao.grab_set()
+
+    # Botão 'Adicionar Arquivo'
+    btn_adicionar = ttk.Button(janela_selecao, text="Adicionar Arquivo")
+    btn_adicionar.pack(pady=10)
+
+    # Treeview para mostrar arquivos e status
+    colunas = ('Arquivo', 'Status', 'Transcrito')
+    lista_arquivos = ttk.Treeview(janela_selecao, columns=colunas, show='headings')
+    lista_arquivos.heading('Arquivo', text='Arquivo')
+    lista_arquivos.heading('Status', text='Status')
+    # Coluna oculta para armazenar o caminho do arquivo transcrito
+    lista_arquivos.heading('Transcrito', text='', anchor='w')
+    lista_arquivos.column('Arquivo', width=400)
+    lista_arquivos.column('Status', width=150)
+    lista_arquivos.column('Transcrito', width=0, stretch=False)
+    lista_arquivos.pack(expand=True, fill='both')
+
+    # Evento de duplo clique para abrir o local do arquivo
+    lista_arquivos.bind("<Double-1>", lambda event: abrir_local_do_arquivo(event, lista_arquivos))
+
+    # Botões de controle
+    frame_botoes = ttk.Frame(janela_selecao)
+    frame_botoes.pack(pady=10)
+
+    btn_iniciar = ttk.Button(frame_botoes, text="Iniciar Transcrição")
+    btn_cancelar = ttk.Button(frame_botoes, text="Cancelar Transcrição")
+    btn_iniciar.pack(side=tk.LEFT, padx=5)
+    btn_cancelar.pack(side=tk.LEFT, padx=5)
+
+    # Função cancelar_transcricao dentro de abrir_janela_selecao_arquivos
+    def cancelar_transcricao():
+        global cancelar_desgravacao
+        resposta = messagebox.askyesno("Cancelar Transcrição", "Os arquivos já transcritos não serão apagados, mas a transcrição dos arquivos restantes será cancelada. Deseja confirmar o cancelamento?")
+        if resposta:
+            cancelar_desgravacao = True
+            janela_selecao.destroy()  # Fecha a janela de seleção de arquivos
+
+    # Configurar comandos
+    btn_adicionar.config(command=lambda: adicionar_arquivo(lista_arquivos))
+    btn_iniciar.config(command=lambda: iniciar_transcricao(lista_arquivos, btn_iniciar, btn_adicionar))
+    btn_cancelar.config(command=cancelar_transcricao)
+
+    # Evento para minimizar a janela principal quando a janela de seleção for minimizada
+    def on_iconify(event):
+        if janela_selecao.state() == 'iconic':
+            root.iconify()
+        elif janela_selecao.state() == 'normal':
+            root.deiconify()
+    janela_selecao.bind("<Unmap>", on_iconify)
+    janela_selecao.bind("<Map>", on_iconify)
 
 root.mainloop()
