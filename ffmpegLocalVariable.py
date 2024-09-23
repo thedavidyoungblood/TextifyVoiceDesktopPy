@@ -10,11 +10,12 @@ from docx import Document
 import webbrowser
 from plyer import notification
 import winsound
-import ffmpeg
 import json
 import tqdm
 import urllib.request
-import time  # Import necessário para pausas
+import time
+import subprocess  # Import necessário para chamar o ffmpeg
+import shutil
 
 warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
 warnings.filterwarnings("ignore", category=UserWarning, message="FP16 is not supported on CPU; using FP32 instead")
@@ -54,25 +55,39 @@ def configurar_logger():
     logger.addHandler(log_handler)
 
 def extrair_audio(filepath, temp_dir):
+    # Certificar-se de que o diretório temp existe
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
+    else:
+        # Verificar se o diretório temp está vazio e limpar se necessário
+        if os.listdir(temp_dir):
+            for filename in os.listdir(temp_dir):
+                file_path = os.path.join(temp_dir, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as e:
+                    logging.error(f'Falha ao deletar {file_path}. Motivo: {e}')
+
+    # Verificar se o arquivo já é um formato de áudio suportado
+    if filepath.lower().endswith(('.mp3', '.wav', '.aac', '.flac', '.m4a', '.ogg')):
+        logging.info(f"O arquivo {filepath} já é um formato de áudio suportado. Não é necessário extrair o áudio.")
+        return filepath
+
+    logging.info(f"Extraindo áudio do vídeo: {filepath}")
+    output_path = os.path.join(temp_dir, "temp_audio.aac")
+
+    # Caminho para o executável ffmpeg na pasta bin
+    ffmpeg_executable = os.path.join('bin', 'ffmpeg.exe')  # Ajuste o caminho conforme necessário
+
     try:
-        if filepath.lower().endswith(('.mp3', '.wav', '.aac', '.flac', '.m4a', '.ogg')):
-            logging.info(f"O arquivo {filepath} já é um formato de áudio suportado. Não é necessário extrair o áudio.")
-            return filepath
-        
-        logging.info(f"Extraindo áudio do vídeo: {filepath}")
-        
-        output_path = os.path.join(temp_dir, "temp_audio.aac")
-        
-        (
-            ffmpeg
-            .input(filepath)
-            .output(output_path, acodec='aac')
-            .run(capture_stdout=True, capture_stderr=True)
-        )
-        
+        command = [ffmpeg_executable, '-i', filepath, '-vn', '-acodec', 'aac', output_path]
+        subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         logging.info(f"Áudio extraído com sucesso para: {output_path}")
         return output_path
-    except ffmpeg.Error as e:
+    except subprocess.CalledProcessError as e:
         logging.error(f"Erro ao extrair áudio com ffmpeg: {e.stderr.decode()}")
         raise
 
@@ -119,15 +134,41 @@ def extrair_e_transcrever_arquivo(filepath, item, lista_arquivos):
 
         lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Em processo...'))
 
-        # Iniciar a transcrição em uma thread separada para permitir o cancelamento
-        transcription_result = [None]
-        transcription_thread = Thread(target=lambda: transcription_result.__setitem__(0, model.transcribe(audio_path, language="pt")))
+        # Iniciar a transcrição em uma thread separada
+        def transcrever():
+            try:
+                result = model.transcribe(audio_path, language="pt")
+                total_segments = len(result["segments"])
+
+                doc = Document()
+                for i, segment in enumerate(result["segments"]):
+                    text = segment["text"]
+                    doc.add_paragraph(text)
+
+                doc.save(local_salvamento)
+                logging.info(f"Transcrição concluída salva em: {local_salvamento}")
+
+                if audio_path != filepath:
+                    os.remove(audio_path)
+
+                lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Finalizado'))
+                # Salvar o caminho do arquivo transcrito nos dados do item
+                lista_arquivos.item(item, values=(filepath, 'Finalizado', local_salvamento))
+            except Exception as e:
+                logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {e}")
+                lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Erro'))
+
+        transcription_thread = Thread(target=transcrever)
+        transcription_thread.daemon = True  # Definir a thread como daemon
         transcription_thread.start()
+
+        # Adicionar a thread à lista global para gerenciamento
+        threads.append(transcription_thread)
 
         # Monitorar a thread de transcrição para cancelamento
         while transcription_thread.is_alive():
             if cancelar_desgravacao:
-                # O cancelamento será efetivo após o término da transcrição atual
+                # A transcrição atual será finalizada, mas não iniciaremos novas
                 break
             time.sleep(0.1)  # Evitar uso excessivo de CPU
 
@@ -140,24 +181,6 @@ def extrair_e_transcrever_arquivo(filepath, item, lista_arquivos):
                 logging.info(f"Arquivo parcialmente transcrito excluído: {local_salvamento}")
             lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Cancelado'))
             return
-
-        result = transcription_result[0]
-        total_segments = len(result["segments"])
-
-        doc = Document()
-        for i, segment in enumerate(result["segments"]):
-            text = segment["text"]
-            doc.add_paragraph(text)
-
-        doc.save(local_salvamento)
-        logging.info(f"Transcrição concluída salva em: {local_salvamento}")
-
-        if audio_path != filepath:
-            os.remove(audio_path)
-
-        lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Finalizado'))
-        # Salvar o caminho do arquivo transcrito nos dados do item
-        lista_arquivos.item(item, values=(filepath, 'Finalizado', local_salvamento))
 
     except Exception as e:
         logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {e}")
@@ -210,6 +233,7 @@ def iniciar_transcricao(lista_arquivos, btn_iniciar, btn_adicionar):
     btn_adicionar.config(state=tk.DISABLED)
 
     thread = Thread(target=transcrever_arquivos_em_fila, args=(lista_arquivos, btn_iniciar, btn_adicionar))
+    thread.daemon = True  # Definir a thread como daemon
     thread.start()
 
 def adicionar_arquivo(lista_arquivos):
@@ -407,7 +431,8 @@ def on_closing():
     cancelar_desgravacao = True
     stop_event.set()
     for thread in threads:
-        thread.join()
+        if thread.is_alive():
+            thread.join()
     root.destroy()
 
 configurar_logger()
@@ -507,7 +532,7 @@ def abrir_janela_selecao_arquivos():
     # Função cancelar_transcricao dentro de abrir_janela_selecao_arquivos
     def cancelar_transcricao():
         global cancelar_desgravacao
-        resposta = messagebox.askyesno("Cancelar Transcrição", "Os arquivos já transcritos não serão apagados, mas a transcrição dos arquivos restantes será cancelada. Deseja confirmar o cancelamento?")
+        resposta = messagebox.askyesno("Cancelar Transcrição", "Os arquivos já transcritos não serão apagados, mas a transcrição dos arquivos restantes será cancelada. Quer sair mesmo assim?")
         if resposta:
             cancelar_desgravacao = True
             janela_selecao.destroy()  # Fecha a janela de seleção de arquivos
