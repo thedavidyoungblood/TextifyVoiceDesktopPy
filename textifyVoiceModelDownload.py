@@ -10,11 +10,12 @@ from docx import Document
 import webbrowser
 from plyer import notification
 import winsound
-import ffmpeg
 import json
-import tqdm
 import urllib.request
-import time  # Import necessário para pausas
+import time
+import subprocess
+import shutil
+import socket  # Import necessário para definir timeout nas operações de rede
 
 warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
 warnings.filterwarnings("ignore", category=UserWarning, message="FP16 is not supported on CPU; using FP32 instead")
@@ -35,6 +36,12 @@ config = {}
 cancelar_desgravacao = False
 threads = []
 stop_event = Event()
+transcricao_em_andamento = False
+confirm_dialog_open = False
+janela_qualidade = None
+janela_selecao = None
+janela_modelo = None
+
 try:
     with open(CONFIG_FILE, 'r') as f:
         config = json.load(f)
@@ -51,28 +58,46 @@ def configurar_logger():
     
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
+    # Remover handlers existentes para evitar logs no console
+    if logger.hasHandlers():
+        logger.handlers.clear()
     logger.addHandler(log_handler)
 
 def extrair_audio(filepath, temp_dir):
+    # Certificar-se de que o diretório temp existe
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
+        logging.info(f"Diretório temporário criado: {temp_dir}")
+    else:
+        # Verificar se o diretório temp está vazio e limpar se necessário
+        if os.listdir(temp_dir):
+            for filename in os.listdir(temp_dir):
+                file_path = os.path.join(temp_dir, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as e:
+                    logging.error(f'Falha ao deletar {file_path}. Motivo: {e}')
+
+    # Verificar se o arquivo já é um formato de áudio suportado
+    if filepath.lower().endswith(('.mp3', '.wav', '.aac', '.flac', '.m4a', '.ogg')):
+        logging.info(f"O arquivo {filepath} já é um formato de áudio suportado. Não é necessário extrair o áudio.")
+        return filepath
+
+    logging.info(f"Extraindo áudio do vídeo: {filepath}")
+    output_path = os.path.join(temp_dir, "temp_audio.aac")
+
+    # Caminho para o executável ffmpeg na pasta bin
+    ffmpeg_executable = os.path.join('bin', 'ffmpeg.exe')  # Ajuste o caminho conforme necessário
+
     try:
-        if filepath.lower().endswith(('.mp3', '.wav', '.aac', '.flac', '.m4a', '.ogg')):
-            logging.info(f"O arquivo {filepath} já é um formato de áudio suportado. Não é necessário extrair o áudio.")
-            return filepath
-        
-        logging.info(f"Extraindo áudio do vídeo: {filepath}")
-        
-        output_path = os.path.join(temp_dir, "temp_audio.aac")
-        
-        (
-            ffmpeg
-            .input(filepath)
-            .output(output_path, acodec='aac')
-            .run(capture_stdout=True, capture_stderr=True)
-        )
-        
+        command = [ffmpeg_executable, '-i', filepath, '-vn', '-acodec', 'aac', output_path]
+        subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         logging.info(f"Áudio extraído com sucesso para: {output_path}")
         return output_path
-    except ffmpeg.Error as e:
+    except subprocess.CalledProcessError as e:
         logging.error(f"Erro ao extrair áudio com ffmpeg: {e.stderr.decode()}")
         raise
 
@@ -90,7 +115,8 @@ def extrair_e_transcrever_arquivo(filepath, item, lista_arquivos):
             logging.info(f"Modelo de transcrição carregado com sucesso")
     except Exception as e:
         logging.error(f"Erro ao carregar o modelo de transcrição: {e}")
-        lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Erro no modelo'))
+        if lista_arquivos.winfo_exists():
+            lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Erro no modelo'))
         return
 
     temp_dir = "./temp"
@@ -117,17 +143,46 @@ def extrair_e_transcrever_arquivo(filepath, item, lista_arquivos):
 
         logging.info(f"Iniciando transcrição do arquivo: {audio_path}")
 
-        lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Em processo...'))
+        if lista_arquivos.winfo_exists():
+            lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Em processo...'))
 
-        # Iniciar a transcrição em uma thread separada para permitir o cancelamento
-        transcription_result = [None]
-        transcription_thread = Thread(target=lambda: transcription_result.__setitem__(0, model.transcribe(audio_path, language="pt")))
+        # Iniciar a transcrição em uma thread separada
+        def transcrever():
+            try:
+                result = model.transcribe(audio_path, language="pt")
+                total_segments = len(result["segments"])
+
+                doc = Document()
+                for i, segment in enumerate(result["segments"]):
+                    text = segment["text"]
+                    doc.add_paragraph(text)
+
+                doc.save(local_salvamento)
+                logging.info(f"Transcrição concluída salva em: {local_salvamento}")
+
+                if audio_path != filepath:
+                    os.remove(audio_path)
+
+                if lista_arquivos.winfo_exists():
+                    lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Finalizado'))
+                    # Salvar o caminho do arquivo transcrito nos dados do item
+                    lista_arquivos.item(item, values=(filepath, 'Finalizado', local_salvamento))
+            except Exception as e:
+                logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {e}")
+                if lista_arquivos.winfo_exists():
+                    lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Erro'))
+
+        transcription_thread = Thread(target=transcrever)
+        transcription_thread.daemon = True  # Definir a thread como daemon
         transcription_thread.start()
+
+        # Adicionar a thread à lista global para gerenciamento
+        threads.append(transcription_thread)
 
         # Monitorar a thread de transcrição para cancelamento
         while transcription_thread.is_alive():
             if cancelar_desgravacao:
-                # O cancelamento será efetivo após o término da transcrição atual
+                # A transcrição atual será finalizada, mas não iniciaremos novas
                 break
             time.sleep(0.1)  # Evitar uso excessivo de CPU
 
@@ -138,45 +193,32 @@ def extrair_e_transcrever_arquivo(filepath, item, lista_arquivos):
             if os.path.exists(local_salvamento):
                 os.remove(local_salvamento)
                 logging.info(f"Arquivo parcialmente transcrito excluído: {local_salvamento}")
-            lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Cancelado'))
+            if lista_arquivos.winfo_exists():
+                lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Cancelado'))
             return
-
-        result = transcription_result[0]
-        total_segments = len(result["segments"])
-
-        doc = Document()
-        for i, segment in enumerate(result["segments"]):
-            text = segment["text"]
-            doc.add_paragraph(text)
-
-        doc.save(local_salvamento)
-        logging.info(f"Transcrição concluída salva em: {local_salvamento}")
-
-        if audio_path != filepath:
-            os.remove(audio_path)
-
-        lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Finalizado'))
-        # Salvar o caminho do arquivo transcrito nos dados do item
-        lista_arquivos.item(item, values=(filepath, 'Finalizado', local_salvamento))
 
     except Exception as e:
         logging.error(f"Erro ao transcrever {nome_arquivo}. Motivo: {e}")
-        lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Erro'))
+        if lista_arquivos.winfo_exists():
+            lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Erro'))
 
 def transcrever_arquivos_em_fila(lista_arquivos, btn_iniciar, btn_adicionar):
-    global cancelar_desgravacao
+    global cancelar_desgravacao, transcricao_em_andamento
+    transcricao_em_andamento = True
     items = lista_arquivos.get_children()
     if not items:
         messagebox.showwarning("Aviso", "Nenhum arquivo selecionado para transcrição.")
         btn_iniciar.config(state=tk.NORMAL)
         btn_adicionar.config(state=tk.NORMAL)
+        transcricao_em_andamento = False
         return
 
     # Atualizar status para 'Aguardando Processo'
     for item in items:
         status = lista_arquivos.item(item, 'values')[1]
         if status not in ['Finalizado', 'Cancelado', 'Erro']:
-            lista_arquivos.set(item, 'Status', 'Aguardando Processo')
+            if lista_arquivos.winfo_exists():
+                lista_arquivos.set(item, 'Status', 'Aguardando Processo')
 
     for item in items:
         if cancelar_desgravacao:
@@ -192,16 +234,20 @@ def transcrever_arquivos_em_fila(lista_arquivos, btn_iniciar, btn_adicionar):
         for item in items:
             status = lista_arquivos.item(item, 'values')[1]
             if status not in ['Finalizado', 'Erro']:
-                lista_arquivos.set(item, 'Status', 'Cancelado')
+                if lista_arquivos.winfo_exists():
+                    lista_arquivos.set(item, 'Status', 'Cancelado')
 
     # Após o processamento de todos os arquivos ou cancelamento
-    btn_iniciar.config(state=tk.NORMAL)
-    btn_adicionar.config(state=tk.NORMAL)
+    if btn_iniciar.winfo_exists():
+        btn_iniciar.config(state=tk.NORMAL)
+    if btn_adicionar.winfo_exists():
+        btn_adicionar.config(state=tk.NORMAL)
     if cancelar_desgravacao:
         messagebox.showinfo("Transcrição Cancelada", "A transcrição foi cancelada pelo usuário.")
         cancelar_desgravacao = False  # Resetar para futuras transcrições
     else:
         messagebox.showinfo("Transcrição Concluída", "Todas as transcrições foram concluídas.")
+    transcricao_em_andamento = False
 
 def iniciar_transcricao(lista_arquivos, btn_iniciar, btn_adicionar):
     global cancelar_desgravacao
@@ -210,6 +256,7 @@ def iniciar_transcricao(lista_arquivos, btn_iniciar, btn_adicionar):
     btn_adicionar.config(state=tk.DISABLED)
 
     thread = Thread(target=transcrever_arquivos_em_fila, args=(lista_arquivos, btn_iniciar, btn_adicionar))
+    thread.daemon = True  # Definir a thread como daemon
     thread.start()
 
 def adicionar_arquivo(lista_arquivos):
@@ -243,6 +290,10 @@ def abrir_local_do_arquivo(event, lista_arquivos):
             messagebox.showinfo("Informação", "O arquivo ainda não foi transcrito.")
 
 def selecionar_modelo():
+    global janela_modelo
+    if janela_modelo and janela_modelo.winfo_exists():
+        janela_modelo.lift()
+        return
     janela_modelo = tk.Toplevel()
     janela_modelo.title("Selecionar Modelo Whisper")
     janela_modelo.geometry("400x200")
@@ -289,6 +340,10 @@ def verificar_modelo_inicial():
         selecionar_qualidade()
 
 def selecionar_qualidade():
+    global janela_qualidade
+    if janela_qualidade and janela_qualidade.winfo_exists():
+        janela_qualidade.lift()
+        return
     janela_qualidade = tk.Toplevel()
     janela_qualidade.title("Selecionar Qualidade")
     janela_qualidade.geometry("500x400")
@@ -346,29 +401,34 @@ def selecionar_qualidade():
         class DownloadCancelado(Exception):
             pass
 
-        def hook(t):
-            last_b = [0]
-
-            def inner(b=1, bsize=1, tsize=None):
-                if cancelar_download:
-                    raise DownloadCancelado()
-                if tsize is not None:
-                    t.total = tsize
-                t.update((b - last_b[0]) * bsize)
-                last_b[0] = b
-                progresso_var.set(t.n / t.total * 100)
-
-            return inner
-
         def baixar_modelo_thread():
             nonlocal cancelar_download
             try:
-                with tqdm.tqdm(unit='B', unit_scale=True, unit_divisor=1024, miniters=1, desc=f"Downloading {modelo_selecionado}.pt") as t:
-                    urllib.request.urlretrieve(url, caminho_modelo, reporthook=hook(t))
-                    if cancelar_download:
-                        os.remove(caminho_modelo)
-                        return
+                # Definir timeout para as operações de socket
+                socket.setdefaulttimeout(5)  # Timeout em segundos
 
+                with urllib.request.urlopen(url) as response, open(caminho_modelo, 'wb') as out_file:
+                    total_size = int(response.getheader('Content-Length').strip())
+                    block_size = 8192
+                    downloaded = 0
+                    while not cancelar_download:
+                        try:
+                            data = response.read(block_size)
+                            if not data:
+                                break
+                            out_file.write(data)
+                            downloaded += len(data)
+                            percent = downloaded * 100 / total_size
+                            progresso_var.set(percent)
+                            label_progresso.config(text=f"Baixando... {percent:.2f}%")
+                        except socket.timeout:
+                            continue  # Timeout ocorreu, verifica o cancelamento e continua
+                    if cancelar_download:
+                        raise DownloadCancelado()
+                if cancelar_download:
+                    if os.path.exists(caminho_modelo):
+                        os.remove(caminho_modelo)
+                    return
                 config['model_path'] = caminho_modelo
                 with open(CONFIG_FILE, 'w') as f:
                     json.dump(config, f)
@@ -384,6 +444,8 @@ def selecionar_qualidade():
             except Exception as e:
                 if not cancelar_download:
                     messagebox.showerror("Erro", f"Erro ao baixar o modelo: {e}")
+                if os.path.exists(caminho_modelo):
+                    os.remove(caminho_modelo)
                 janela_progresso.destroy()
 
         def cancelar_download_fn():
@@ -391,10 +453,15 @@ def selecionar_qualidade():
             cancelar_download = True
             janela_progresso.destroy()
 
+        # Adicionando o protocolo para fechar a janela de download
+        janela_progresso.protocol("WM_DELETE_WINDOW", cancelar_download_fn)
+
         btn_cancelar = ttk.Button(janela_progresso, text="Cancelar Download", command=cancelar_download_fn)
         btn_cancelar.pack(pady=10)
 
-        Thread(target=baixar_modelo_thread).start()
+        download_thread = Thread(target=baixar_modelo_thread)
+        download_thread.daemon = True  # Assegura que a thread não impeça o fechamento da aplicação
+        download_thread.start()
 
     btn_baixar = ttk.Button(janela_qualidade, text="Selecionar Modelo", command=baixar_modelo)
     btn_baixar.pack(pady=10)
@@ -404,7 +471,8 @@ def on_closing():
     cancelar_desgravacao = True
     stop_event.set()
     for thread in threads:
-        thread.join()
+        if thread.is_alive():
+            thread.join()
     root.destroy()
 
 configurar_logger()
@@ -468,6 +536,11 @@ root.protocol("WM_DELETE_WINDOW", on_closing)
 root.after(10, verificar_modelo_inicial)
 
 def abrir_janela_selecao_arquivos():
+    global janela_selecao, transcricao_em_andamento, confirm_dialog_open
+    if janela_selecao and janela_selecao.winfo_exists():
+        janela_selecao.lift()
+        return
+    transcricao_em_andamento = False
     janela_selecao = tk.Toplevel()
     janela_selecao.title("Seleção de Arquivos")
     janela_selecao.geometry("700x400")
@@ -497,22 +570,33 @@ def abrir_janela_selecao_arquivos():
     frame_botoes.pack(pady=10)
 
     btn_iniciar = ttk.Button(frame_botoes, text="Iniciar Transcrição")
-    btn_cancelar = ttk.Button(frame_botoes, text="Cancelar Transcrição")
+    btn_cancelar = ttk.Button(frame_botoes, text="Cancelar")
     btn_iniciar.pack(side=tk.LEFT, padx=5)
     btn_cancelar.pack(side=tk.LEFT, padx=5)
 
-    # Função cancelar_transcricao dentro de abrir_janela_selecao_arquivos
     def cancelar_transcricao():
-        global cancelar_desgravacao
-        resposta = messagebox.askyesno("Cancelar Transcrição", "Os arquivos já transcritos não serão apagados, mas a transcrição dos arquivos restantes será cancelada. Deseja confirmar o cancelamento?")
+        global cancelar_desgravacao, transcricao_em_andamento, confirm_dialog_open
+        if confirm_dialog_open:
+            return  # Se o diálogo já está aberto, não faz nada
+        confirm_dialog_open = True
+        resposta = messagebox.askyesno("Confirmar", "Você realmente deseja fechar a janela? A transcrição será cancelada se estiver em andamento.")
+        confirm_dialog_open = False
         if resposta:
-            cancelar_desgravacao = True
-            janela_selecao.destroy()  # Fecha a janela de seleção de arquivos
+            if transcricao_em_andamento:
+                cancelar_desgravacao = True
+                # Aguardar threads terminarem
+                for thread in threads:
+                    if thread.is_alive():
+                        thread.join()
+            janela_selecao.destroy()
 
     # Configurar comandos
     btn_adicionar.config(command=lambda: adicionar_arquivo(lista_arquivos))
     btn_iniciar.config(command=lambda: iniciar_transcricao(lista_arquivos, btn_iniciar, btn_adicionar))
     btn_cancelar.config(command=cancelar_transcricao)
+
+    # Adicionando o protocolo para fechar a janela de transcrição
+    janela_selecao.protocol("WM_DELETE_WINDOW", cancelar_transcricao)
 
     # Evento para minimizar a janela principal quando a janela de seleção for minimizada
     def on_iconify(event):
