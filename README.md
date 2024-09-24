@@ -1,80 +1,156 @@
-# TextifyVoice [ Beta ] 
+# TextifyVoice [Beta]
 
-## Descrição
+TextifyVoice é uma aplicação GUI (Interface Gráfica de Usuário) que permite transcrever arquivos de áudio e vídeo em texto utilizando o modelo Whisper da OpenAI. Ideal para transcrever entrevistas, palestras, aulas e outros conteúdos de áudio e vídeo em formato de texto de maneira fácil e rápida.
 
-O **Desgravador** é uma aplicação desenvolvida em Python que permite a transcrição de vídeos e áudios para texto. Utilizando a biblioteca Whisper para transcrição e FFmpeg para extração de áudio, o software oferece uma interface gráfica amigável para facilitar o processo de transcrição.
+## Índice
 
-## Funcionalidades
+- [Recursos](#recursos)
+- [Capturas de Tela](#capturas-de-tela)
+- [Requisitos](#requisitos)
+- [Instalação](#instalação)
+- [Como Usar](#como-usar)
+- [Compilação do Executável](#compilação-do-executável)
+- [Contribuição](#contribuição)
+- [Licença](#licença)
 
-- **Transcrição de Vídeos e Áudios**: Suporta arquivos MP4 e MP3.
-- **Extração de Áudio**: Utiliza FFmpeg para extrair o áudio de vídeos.
-- **Notificações**: Notifica o usuário sobre o progresso e conclusão das transcrições.
-- **Configuração de Modelo**: Permite selecionar e salvar o caminho do modelo Whisper para transcrição.
-- **Rotação de Logs**: Utiliza `RotatingFileHandler` para gerenciar o tamanho dos arquivos de log.
+## Recursos
+
+- **Transcrição de Áudio e Vídeo**: Suporta diversos formatos como `.mp4`, `.mp3`, `.wav`, `.mkv`, `.aac`, `.flac`, `.m4a`, `.ogg`.
+- **Interface Intuitiva**: Desenvolvido com Tkinter para proporcionar uma experiência amigável ao usuário.
+- **Seleção de Qualidade do Modelo**: Escolha entre diferentes modelos de transcrição (small, medium, large) de acordo com suas necessidades.
+- **Processamento em Lote**: Adicione múltiplos arquivos para transcrição em fila.
+- **Gerenciamento de Transcrições**: Acompanhe o status de cada arquivo e acesse facilmente os resultados.
+- **Personalização**: Possibilidade de selecionar e baixar modelos específicos do Whisper.
+
+## Capturas de Tela
+
+![alt text](image.png)
 
 ## Requisitos
 
-- Python 3.6 ou superior
-- Bibliotecas Python: `tkinter`, `plyer`, `winsound`, `whisper`, `docx`, `json`, `subprocess`, `warnings`
-- FFmpeg (incluso na pasta `ffmpeg`)
+- **Sistema Operacional**: Windows 7 ou superior.
+- **Python**: 3.7 ou superior.
+- **Dependências Python**:
+  - `tkinter`
+  - `whisper`
+  - `torch`
+  - `requests`
+  - `python-docx`
+  - `plyer`
+
+- **FFmpeg**: O binário `ffmpeg.exe` deve estar disponível na pasta `bin` do projeto.
 
 ## Instalação
 
-1. Clone o repositório:
-    ```bash
-    git clone https://github.com/finnzao/WhisperDesktopPy.git
-    ```
-2. Certifique-se de que o FFmpeg está na pasta `ffmpeg` dentro do diretório do projeto().
+1. **Clone o Repositório**:
 
-## Uso
+   ```bash
+   git clone https://github.com/seu_usuario/textifyvoice.git
+   cd textifyvoice
+   ```
 
-1. Execute o script principal:
-    ```bash
-    python textifyVoice.py
-    ```
+2. **Crie um Ambiente Virtual (Opcional, mas Recomendado)**:
 
-2. Na interface gráfica:
-    - Clique em **Selecionar qualidade** para escolher o modelo Whisper.
-    - Clique em **Selecionar Arquivos** para escolher os vídeos ou áudios que deseja transcrever.
-    - Acompanhe o progresso e as notificações na interface.
+   ```bash
+   python -m venv venv
+   venv\Scripts\activate  # No Windows
+   # source venv/bin/activate  # No Linux/Mac
+   ```
 
-## Estrutura do Projeto
+3. **Instale as Dependências**:
 
-```plaintext
-desgravador/
-├── bin/
-│   └── icon.ico
-├── ffmpeg/
-│   └── ffmpeg.exe
-├── logs/
-│   └── info.log
-├── config.json
-├── textifyVoice.py
-├── requirements.txt
-└── README.md
-```
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-## Configuração
+   *Certifique-se de que o arquivo `requirements.txt` contém todas as dependências necessárias.*
 
-O arquivo `config.json` é usado para armazenar o caminho do modelo Whisper selecionado. Ele é criado automaticamente na primeira execução do programa, caso não exista.
+4. **Configure o FFmpeg**:
 
-### Exemplo de `config.json`
+   - Baixe o binário estático do FFmpeg em [ffmpeg.org](https://ffmpeg.org/download.html).
+   - Coloque o arquivo `ffmpeg.exe` na pasta `bin` do projeto.
 
-```json
-{
-    "model_path": "caminho/para/o/modelo/whisper.pt"
-}
-```
+## Como Usar
 
-## Logs
+1. **Execute o Aplicativo**:
 
-Os logs são armazenados na pasta `logs` e gerenciados pelo `RotatingFileHandler`. O arquivo de log `info.log` é rotacionado quando atinge 5 MB, mantendo até 5 arquivos de backup.
+   ```bash
+   python your_script.py
+   ```
+
+2. **Selecione a Qualidade do Modelo**:
+
+   - Ao abrir o aplicativo pela primeira vez, aparecerá a janela **"Selecionar Qualidade"**.
+   - Escolha o modelo desejado (por exemplo, `medium`) e clique em **"Selecionar Modelo"**.
+   - O modelo será baixado automaticamente. Aguarde até que o download seja concluído.
+
+3. **Selecione Arquivos para Transcrição**:
+
+   - Na tela principal, clique em **"Selecionar Arquivos"**.
+   - Adicione os arquivos de áudio ou vídeo que deseja transcrever.
+   - Os arquivos aparecerão em uma lista com o status **"Preparado"**.
+
+4. **Inicie a Transcrição**:
+
+   - Clique em **"Iniciar Transcrição"** para começar o processo.
+   - Acompanhe o status de cada arquivo na lista:
+     - **Preparado**: Pronto para transcrição.
+     - **Aguardando processamento**: Na fila para ser transcrito.
+     - **Em processamento...**: Transcrição em andamento.
+     - **Finalizado**: Transcrição concluída com sucesso.
+     - **Erro**: Ocorreu um problema durante a transcrição.
+     - **Cancelado**: Transcrição cancelada pelo usuário.
+
+5. **Visualize os Resultados**:
+
+   - Após a transcrição ser finalizada, dê um duplo clique no arquivo com status **"Finalizado"**.
+   - Isso abrirá o diretório onde o arquivo transcrito foi salvo.
+   - Os arquivos transcritos são salvos na mesma pasta do arquivo original, com o sufixo `_text.docx`.
+
+## Compilação do Executável
+
+Para distribuir o aplicativo sem a necessidade de instalar o Python, você pode criar um executável usando o PyInstaller.
+
+1. **Instale o PyInstaller**:
+
+   ```bash
+   pip install pyinstaller
+   ```
+
+2. **Prepare o Comando de Compilação**:
+
+   - Certifique-se de que todos os caminhos estão corretos e que os arquivos necessários estão disponíveis.
+
+3. **Crie o Executável**:
+
+   ```bash
+   pyinstaller --windowed --hidden-import=whisper --icon="./bin/icon.ico" \
+   --add-data=".bin/ffmpeg.exe;bin" \
+   --add-data="config.json;." \
+   your_script.py
+   ```
+
+   **Explicação dos Parâmetros**:
+
+   - `--windowed`: O executável será criado sem uma janela de console.
+   - `--hidden-import=whisper`: Inclui o módulo `whisper` que pode não ser detectado automaticamente.
+   - `--icon="./bin/icon.ico"`: Define o ícone do executável.
+   - `--add-data`: Inclui arquivos adicionais necessários (como `ffmpeg.exe` e `config.json`).
+   - `your_script.py`: O nome do arquivo principal do seu aplicativo.
+
+4. **Distribua o Aplicativo**:
+
+   - Após a compilação, a pasta `dist` conterá o executável.
+   - Distribua essa pasta para os usuários.
 
 ## Contribuição
 
-Contribuições são bem-vindas! Sinta-se à vontade para abrir issues e pull requests.
+Contribuições são bem-vindas! Se você encontrar algum problema ou tiver sugestões, sinta-se à vontade para abrir uma [issue](https://github.com/seu_usuario/textifyvoice/issues) ou enviar um [pull request](https://github.com/seu_usuario/textifyvoice/pulls).
 
 ## Licença
 
-Este projeto está licenciado sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+Este projeto está licenciado sob os termos da licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
 
+---
+
+**Nota**: Certifique-se de ajustar os comandos e caminhos de acordo com a estrutura real do seu projeto. Além disso, é recomendável adicionar o arquivo `requirements.txt` com todas as dependências e incluir capturas de tela para enriquecer o README.

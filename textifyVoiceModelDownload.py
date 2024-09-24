@@ -7,17 +7,14 @@ import whisper
 import warnings
 import os
 from docx import Document
-import webbrowser
 from plyer import notification
-import winsound
 import json
-import urllib.request
 import time
 import subprocess
 import shutil
-import socket  # Import necessário para definir timeout nas operações de rede
 from platform import system
-import torch  # Importante para verificar se a GPU está disponível
+import torch
+import requests
 
 class NoConsolePopen(subprocess.Popen):
     """
@@ -162,7 +159,7 @@ def extrair_e_transcrever_arquivo(filepath, item, lista_arquivos):
         logging.info(f"Iniciando transcrição do arquivo: {audio_path}")
 
         if lista_arquivos.winfo_exists():
-            lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Em processo...'))
+            lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Em processamento...'))
 
         # Iniciar a transcrição em uma thread separada
         def transcrever():
@@ -176,7 +173,7 @@ def extrair_e_transcrever_arquivo(filepath, item, lista_arquivos):
                     doc.add_paragraph(text)
 
                 doc.save(local_salvamento)
-                logging.info(f"Transcrição concluída salva em: {local_salvamento}")
+                logging.info(f"Transcrição concluída e salva em: {local_salvamento}")
 
                 if audio_path != filepath:
                     os.remove(audio_path)
@@ -226,35 +223,50 @@ def transcrever_arquivos_em_fila(lista_arquivos, btn_iniciar, btn_adicionar):
     transcricao_em_andamento = True
     items = lista_arquivos.get_children()
     if not items:
-        messagebox.showwarning("Aviso", "Nenhum arquivo selecionado para transcrição.")
-        btn_iniciar.config(state=tk.NORMAL)
-        btn_adicionar.config(state=tk.NORMAL)
+        if btn_iniciar.winfo_exists():
+            messagebox.showwarning("Aviso", "Nenhum arquivo selecionado para transcrição.")
+            btn_iniciar.config(state=tk.NORMAL)
+        if btn_adicionar.winfo_exists():
+            btn_adicionar.config(state=tk.NORMAL)
         transcricao_em_andamento = False
         return
 
-    # Atualizar status para 'Aguardando Processo'
+    # Atualizar status para 'Aguardando processamento'
     for item in items:
-        status = lista_arquivos.item(item, 'values')[1]
-        if status not in ['Finalizado', 'Cancelado', 'Erro']:
-            if lista_arquivos.winfo_exists():
-                lista_arquivos.set(item, 'Status', 'Aguardando Processo')
+        if cancelar_desgravacao:
+            break
+        if lista_arquivos.winfo_exists():
+            status_values = lista_arquivos.item(item, 'values')
+            if len(status_values) > 1:
+                status = status_values[1]
+                if status not in ['Finalizado', 'Cancelado', 'Erro']:
+                    lista_arquivos.set(item, 'Status', 'Aguardando processamento')
+            else:
+                continue  # Pular se os valores não estiverem completos
 
     for item in items:
         if cancelar_desgravacao:
             break
-        status = lista_arquivos.item(item, 'values')[1]
-        if status in ['Finalizado', 'Cancelado', 'Erro']:
-            continue  # Pular arquivos já processados
-        filepath = lista_arquivos.item(item, 'values')[0]
-        extrair_e_transcrever_arquivo(filepath, item, lista_arquivos)
+        if lista_arquivos.winfo_exists():
+            status_values = lista_arquivos.item(item, 'values')
+            if len(status_values) > 1:
+                status = status_values[1]
+                if status in ['Finalizado', 'Cancelado', 'Erro']:
+                    continue  # Pular arquivos já processados
+                filepath = status_values[0]
+                extrair_e_transcrever_arquivo(filepath, item, lista_arquivos)
+            else:
+                continue  # Pular se os valores não estiverem completos
 
     # Atualizar status para 'Cancelado' nos itens restantes
     if cancelar_desgravacao:
         for item in items:
-            status = lista_arquivos.item(item, 'values')[1]
-            if status not in ['Finalizado', 'Erro']:
-                if lista_arquivos.winfo_exists():
-                    lista_arquivos.set(item, 'Status', 'Cancelado')
+            if lista_arquivos.winfo_exists():
+                status_values = lista_arquivos.item(item, 'values')
+                if len(status_values) > 1:
+                    status = status_values[1]
+                    if status not in ['Finalizado', 'Erro']:
+                        lista_arquivos.set(item, 'Status', 'Cancelado')
 
     # Após o processamento de todos os arquivos ou cancelamento
     if btn_iniciar.winfo_exists():
@@ -262,10 +274,12 @@ def transcrever_arquivos_em_fila(lista_arquivos, btn_iniciar, btn_adicionar):
     if btn_adicionar.winfo_exists():
         btn_adicionar.config(state=tk.NORMAL)
     if cancelar_desgravacao:
-        messagebox.showinfo("Transcrição Cancelada", "A transcrição foi cancelada pelo usuário.")
+        if btn_iniciar.winfo_exists():
+            messagebox.showinfo("Transcrição Cancelada", "A transcrição foi cancelada pelo usuário.")
         cancelar_desgravacao = False  # Resetar para futuras transcrições
     else:
-        messagebox.showinfo("Transcrição Concluída", "Todas as transcrições foram concluídas.")
+        if btn_iniciar.winfo_exists():
+            messagebox.showinfo("Transcrição Concluída", "Todas as transcrições foram concluídas.")
     transcricao_em_andamento = False
 
 def iniciar_transcricao(lista_arquivos, btn_iniciar, btn_adicionar):
@@ -279,9 +293,9 @@ def iniciar_transcricao(lista_arquivos, btn_iniciar, btn_adicionar):
     thread.start()
 
 def adicionar_arquivo(lista_arquivos):
-    filepaths = filedialog.askopenfilenames(title="Escolher os vídeos que serão transcritos para texto",
-                                            filetypes=[("Arquivos Selecionáveis", "*.mp4;*.mp3;*.wav;*.mkv"),
-                                                       ("MP4 files", "*.mp4",), ("MP3 files", "*.mp3"), ("WAV files", "*.wav")])
+    filepaths = filedialog.askopenfilenames(title="Escolha os arquivos de áudio ou vídeo para transcrever",
+                                            filetypes=[("Arquivos suportados", "*.mp4;*.mp3;*.wav;*.mkv;*.aac;*.flac;*.m4a;*.ogg"),
+                                                       ("Arquivos MP4", "*.mp4"), ("Arquivos MP3", "*.mp3"), ("Arquivos WAV", "*.wav"), ("Arquivos AAC", "*.aac"), ("Arquivos FLAC", "*.flac"), ("Arquivos M4A", "*.m4a"), ("Arquivos OGG", "*.ogg")])
     for filepath in filepaths:
         # Verificar se o arquivo já está na lista
         already_exists = False
@@ -304,7 +318,7 @@ def abrir_local_do_arquivo(event, lista_arquivos):
                 diretorio = os.path.dirname(transcribed_file)
                 os.startfile(diretorio)
             else:
-                messagebox.showerror("Erro", "Arquivo transcrito não encontrado.")
+                messagebox.showerror("Erro", "O arquivo transcrito não foi encontrado.")
         else:
             messagebox.showinfo("Informação", "O arquivo ainda não foi transcrito.")
 
@@ -318,7 +332,7 @@ def selecionar_modelo():
     janela_modelo.geometry("400x200")
     janela_modelo.grab_set()
 
-    label = ttk.Label(janela_modelo, text="Selecione o caminho do modelo:")
+    label = ttk.Label(janela_modelo, text="Selecione o modelo Whisper:")
     label.pack(pady=20)
 
     model_path_var_local = tk.StringVar(value=config.get('model_path', ''))
@@ -336,7 +350,7 @@ def selecionar_modelo():
                 with open(CONFIG_FILE, 'w') as f:
                     json.dump(config, f)
                 model_path_var.set(filepath)
-                messagebox.showinfo("Sucesso", "Modelo carregado e caminho salvo com sucesso!")
+                messagebox.showinfo("Sucesso", "Modelo carregado e o caminho foi salvo com sucesso!")
                 janela_modelo.destroy()
             except Exception as e:
                 messagebox.showerror("Erro", f"Erro ao carregar o modelo: {e}")
@@ -398,7 +412,7 @@ def selecionar_qualidade():
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(config, f)
             model_path_var.set(caminho_modelo)
-            messagebox.showinfo("Modelo Status", "Modelo Selecionado.")
+            messagebox.showinfo("Sucesso", "Modelo selecionado com sucesso.")
             janela_qualidade.destroy()
             return
 
@@ -412,7 +426,7 @@ def selecionar_qualidade():
         barra_progresso = ttk.Progressbar(janela_progresso, variable=progresso_var, maximum=100)
         barra_progresso.pack(pady=20, padx=20, fill=tk.X)
 
-        label_progresso = ttk.Label(janela_progresso, text="Aguardando o download ser finalizado...")
+        label_progresso = ttk.Label(janela_progresso, text="Baixando o modelo, por favor aguarde...")
         label_progresso.pack(pady=5)
 
         cancelar_download = False
@@ -423,27 +437,20 @@ def selecionar_qualidade():
         def baixar_modelo_thread():
             nonlocal cancelar_download
             try:
-                # Definir timeout para as operações de socket
-                socket.setdefaulttimeout(1)  # Timeout em segundos (reduzido de 5 para 1)
-
-                with urllib.request.urlopen(url) as response, open(caminho_modelo, 'wb') as out_file:
-                    total_size = int(response.getheader('Content-Length').strip())
-                    block_size = 8192
+                with requests.get(url, stream=True) as response:
+                    response.raise_for_status()
+                    total_size = int(response.headers.get('content-length', 0))
+                    block_size = 65536  # 64 KB
                     downloaded = 0
-                    while not cancelar_download:
-                        try:
-                            data = response.read(block_size)
-                            if not data:
-                                break
+                    with open(caminho_modelo, 'wb') as out_file:
+                        for data in response.iter_content(block_size):
+                            if cancelar_download:
+                                raise DownloadCancelado()
                             out_file.write(data)
                             downloaded += len(data)
                             percent = downloaded * 100 / total_size
                             progresso_var.set(percent)
                             label_progresso.config(text=f"Baixando... {percent:.2f}%")
-                        except socket.timeout:
-                            continue  # Timeout ocorreu, verifica o cancelamento e continua
-                    if cancelar_download:
-                        raise DownloadCancelado()
                 if cancelar_download:
                     if os.path.exists(caminho_modelo):
                         os.remove(caminho_modelo)
@@ -452,7 +459,7 @@ def selecionar_qualidade():
                 with open(CONFIG_FILE, 'w') as f:
                     json.dump(config, f)
                 model_path_var.set(caminho_modelo)
-                messagebox.showinfo("Sucesso", "Modelo baixado e caminho salvo com sucesso!")
+                messagebox.showinfo("Sucesso", "Modelo baixado e o caminho foi salvo com sucesso!")
                 janela_progresso.destroy()
                 janela_qualidade.destroy()
             except DownloadCancelado:
@@ -499,8 +506,7 @@ root.title("TextifyVoice [ Beta ] by@felipe.sh")
 
 root.geometry("650x500")
 
-# Se tiver um ícone, descomente a linha abaixo e ajuste o caminho
-# root.iconbitmap('./bin/icon.ico')
+root.iconbitmap('./bin/icon.ico')
 
 cor_fundo = "#343a40"
 root.configure(bg=cor_fundo)
@@ -525,27 +531,25 @@ title_frame = ttk.Frame(root, style="TFrame", height=70)
 title_frame.pack(side=tk.TOP, fill=tk.X)
 title_frame.pack_propagate(False)
 
-titulo = ttk.Label(title_frame, text="Transcritor de Vídeo", style="Title.TLabel", anchor="center")
+titulo = ttk.Label(title_frame, text="TextifyVoice", style="Title.TLabel", anchor="center")
 titulo.pack(side=tk.TOP, fill=tk.X, pady=20)
 
 frame = ttk.Frame(root, style="TFrame")
 frame.pack(expand=True, fill=tk.BOTH, padx=20, pady=20)
 
 text_var = tk.StringVar()
-text_var.set("Selecione os arquivos MP4 para transcrever.")
+text_var.set("Selecione os arquivos de áudio ou vídeo para transcrever.")
 text_label = ttk.Label(frame, textvariable=text_var, wraplength=650, style="TLabel")
 text_label.pack()
 
 model_path = config.get('model_path')
 model_path_var = tk.StringVar(value=model_path)
 
-btn_abrir = ttk.Button(frame, text="Abrir Pasta de Documentos Transcritos", state=tk.DISABLED, style="TButton")
 btn_select = ttk.Button(frame, text="Selecionar Arquivos", style="TButton")
 btn_qualidade = ttk.Button(frame, text="Selecionar Qualidade", command=selecionar_qualidade, style="Modelo.TButton")
 
 btn_select.config(command=lambda: abrir_janela_selecao_arquivos())
 btn_select.pack(pady=(10, 0))
-btn_abrir.pack(pady=(10, 20))
 btn_qualidade.pack(pady=(10, 0))
 
 root.protocol("WM_DELETE_WINDOW", on_closing)
@@ -553,11 +557,12 @@ root.protocol("WM_DELETE_WINDOW", on_closing)
 root.after(10, verificar_modelo_inicial)
 
 def abrir_janela_selecao_arquivos():
-    global janela_selecao, transcricao_em_andamento, confirm_dialog_open
+    global janela_selecao, transcricao_em_andamento, confirm_dialog_open, cancelar_desgravacao
     if janela_selecao and janela_selecao.winfo_exists():
         janela_selecao.lift()
         return
     transcricao_em_andamento = False
+    cancelar_desgravacao = False
     janela_selecao = tk.Toplevel()
     janela_selecao.title("Seleção de Arquivos")
     janela_selecao.geometry("700x400")
