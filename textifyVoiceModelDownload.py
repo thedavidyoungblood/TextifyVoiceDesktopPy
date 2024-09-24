@@ -16,6 +16,20 @@ import time
 import subprocess
 import shutil
 import socket  # Import necessário para definir timeout nas operações de rede
+from platform import system
+
+class NoConsolePopen(subprocess.Popen):
+    """
+    A custom Popen class that disables creation of a console window in Windows.
+    """
+    def __init__(self, args, **kwargs):
+        if system() == 'Windows' and 'startupinfo' not in kwargs:
+            kwargs['startupinfo'] = subprocess.STARTUPINFO()
+            kwargs['startupinfo'].dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        super().__init__(args, **kwargs)
+
+# Substituindo subprocess.Popen pela classe personalizada
+subprocess.Popen = NoConsolePopen
 
 warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
 warnings.filterwarnings("ignore", category=UserWarning, message="FP16 is not supported on CPU; using FP32 instead")
@@ -182,10 +196,11 @@ def extrair_e_transcrever_arquivo(filepath, item, lista_arquivos):
         # Monitorar a thread de transcrição para cancelamento
         while transcription_thread.is_alive():
             if cancelar_desgravacao:
-                # A transcrição atual será finalizada, mas não iniciaremos novas
-                break
+                # Não espera a thread terminar
+                return
             time.sleep(0.1)  # Evitar uso excessivo de CPU
 
+        # Só chama join se não foi cancelado
         transcription_thread.join()
 
         if cancelar_desgravacao:
@@ -470,9 +485,7 @@ def on_closing():
     global cancelar_desgravacao
     cancelar_desgravacao = True
     stop_event.set()
-    for thread in threads:
-        if thread.is_alive():
-            thread.join()
+    # Não espera as threads terminarem
     root.destroy()
 
 configurar_logger()
@@ -584,10 +597,7 @@ def abrir_janela_selecao_arquivos():
         if resposta:
             if transcricao_em_andamento:
                 cancelar_desgravacao = True
-                # Aguardar threads terminarem
-                for thread in threads:
-                    if thread.is_alive():
-                        thread.join()
+                # Não espera as threads terminarem
             janela_selecao.destroy()
 
     # Configurar comandos
