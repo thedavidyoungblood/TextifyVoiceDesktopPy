@@ -143,14 +143,4 @@ Para distribuir o aplicativo sem a necessidade de instalar o Python, você pode 
    - Após a compilação, a pasta `dist` conterá o executável.
    - Distribua essa pasta para os usuários.
 
-## Contribuição
 
-Contribuições são bem-vindas! Se você encontrar algum problema ou tiver sugestões, sinta-se à vontade para abrir uma [issue](https://github.com/seu_usuario/textifyvoice/issues) ou enviar um [pull request](https://github.com/seu_usuario/textifyvoice/pulls).
-
-## Licença
-
-Este projeto está licenciado sob os termos da licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
-
----
-
-**Nota**: Certifique-se de ajustar os comandos e caminhos de acordo com a estrutura real do seu projeto. Além disso, é recomendável adicionar o arquivo `requirements.txt` com todas as dependências e incluir capturas de tela para enriquecer o README.
