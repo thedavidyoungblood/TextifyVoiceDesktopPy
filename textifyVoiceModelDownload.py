@@ -17,6 +17,7 @@ import subprocess
 import shutil
 import socket  # Import necessário para definir timeout nas operações de rede
 from platform import system
+import torch  # Importante para verificar se a GPU está disponível
 
 class NoConsolePopen(subprocess.Popen):
     """
@@ -124,7 +125,10 @@ def extrair_e_transcrever_arquivo(filepath, item, lista_arquivos):
     try:
         model_path = config.get('model_path')
         logging.info(f"Tentando carregar o modelo do caminho: {model_path}")
-        model = whisper.load_model(model_path)
+        # Verificar se GPU está disponível
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        logging.info(f"Usando dispositivo: {device}")
+        model = whisper.load_model(model_path, device=device)
         if model:
             logging.info(f"Modelo de transcrição carregado com sucesso")
     except Exception as e:
@@ -420,7 +424,7 @@ def selecionar_qualidade():
             nonlocal cancelar_download
             try:
                 # Definir timeout para as operações de socket
-                socket.setdefaulttimeout(5)  # Timeout em segundos
+                socket.setdefaulttimeout(1)  # Timeout em segundos (reduzido de 5 para 1)
 
                 with urllib.request.urlopen(url) as response, open(caminho_modelo, 'wb') as out_file:
                     total_size = int(response.getheader('Content-Length').strip())
@@ -558,9 +562,15 @@ def abrir_janela_selecao_arquivos():
     janela_selecao.title("Seleção de Arquivos")
     janela_selecao.geometry("700x400")
     janela_selecao.grab_set()
+    janela_selecao.configure(bg=cor_fundo)  # Ajustar a cor de fundo da janela
+
+    # Atualizar estilos para a janela de seleção
+    style.configure("Selecao.TFrame", background=cor_fundo)
+    style.configure("Selecao.TButton", background=cor_acento, foreground=cor_frente, font=("Arial", 10, "bold"), borderwidth=1, relief="flat")
+    style.configure("Selecao.TLabel", background=cor_fundo, foreground=cor_frente, font=("Arial", 12))
 
     # Botão 'Adicionar Arquivo'
-    btn_adicionar = ttk.Button(janela_selecao, text="Adicionar Arquivo")
+    btn_adicionar = ttk.Button(janela_selecao, text="Adicionar Arquivo", style="Selecao.TButton")
     btn_adicionar.pack(pady=10)
 
     # Treeview para mostrar arquivos e status
@@ -579,11 +589,11 @@ def abrir_janela_selecao_arquivos():
     lista_arquivos.bind("<Double-1>", lambda event: abrir_local_do_arquivo(event, lista_arquivos))
 
     # Botões de controle
-    frame_botoes = ttk.Frame(janela_selecao)
+    frame_botoes = ttk.Frame(janela_selecao, style="Selecao.TFrame")
     frame_botoes.pack(pady=10)
 
-    btn_iniciar = ttk.Button(frame_botoes, text="Iniciar Transcrição")
-    btn_cancelar = ttk.Button(frame_botoes, text="Cancelar")
+    btn_iniciar = ttk.Button(frame_botoes, text="Iniciar Transcrição", style="Selecao.TButton")
+    btn_cancelar = ttk.Button(frame_botoes, text="Cancelar", style="Selecao.TButton")
     btn_iniciar.pack(side=tk.LEFT, padx=5)
     btn_cancelar.pack(side=tk.LEFT, padx=5)
 
