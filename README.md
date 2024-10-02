@@ -45,7 +45,7 @@ TextifyVoice é uma aplicação GUI (Interface Gráfica de Usuário) que permite
 1. **Clone o Repositório**:
 
    ```bash
-   git clone https://github.com/seu_usuario/textifyvoice.git
+   git clone https://github.com/finnzao/WhisperDesktopPy.git
    cd textifyvoice
    ```
 
