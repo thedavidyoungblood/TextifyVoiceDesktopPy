@@ -45,7 +45,7 @@ TextifyVoice é uma aplicação GUI (Interface Gráfica de Usuário) que permite
 1. **Clone o Repositório**:
 
    ```bash
-   git clone https://github.com/seu_usuario/textifyvoice.git
+   git clone https://github.com/finnzao/WhisperDesktopPy.git
    cd textifyvoice
    ```
 
@@ -60,10 +60,10 @@ TextifyVoice é uma aplicação GUI (Interface Gráfica de Usuário) que permite
 3. **Instale as Dependências**:
 
    ```bash
-   pip install -r requirements.txt
+   pip install whisper torch requests python-docx plyer
    ```
 
-   *Certifique-se de que o arquivo `requirements.txt` contém todas as dependências necessárias.*
+   
 
 4. **Configure o FFmpeg**:
 
