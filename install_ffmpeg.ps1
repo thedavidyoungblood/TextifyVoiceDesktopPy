@@ -64,3 +64,4 @@ Write-Host "Adicionando o FFmpeg à variável PATH do usuário..."
 $env:Path = [System.Environment]::GetEnvironmentVariable("PATH","User")
 
 Write-Host "Instalação concluída. Verifique executando 'ffmpeg -version'."
+
