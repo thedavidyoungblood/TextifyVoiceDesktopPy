@@ -10,28 +10,14 @@ from docx import Document
 from plyer import notification
 import json
 import time
-import subprocess
 import shutil
-from platform import system
 import torch
 import requests
-
-class NoConsolePopen(subprocess.Popen):
-    """
-    A custom Popen class that disables creation of a console window in Windows.
-    """
-    def __init__(self, args, **kwargs):
-        if system() == 'Windows' and 'startupinfo' not in kwargs:
-            kwargs['startupinfo'] = subprocess.STARTUPINFO()
-            kwargs['startupinfo'].dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        super().__init__(args, **kwargs)
-
-# Substituindo subprocess.Popen pela classe personalizada
-subprocess.Popen = NoConsolePopen
+import av  
 
 warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
 warnings.filterwarnings("ignore", category=UserWarning, message="FP16 is not supported on CPU; using FP32 instead")
-
+warnings.filterwarnings("ignore", category=FutureWarning, message="You are using `torch.load` with `weights_only=False`")
 CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
     "model_path": "",
@@ -99,18 +85,29 @@ def extrair_audio(filepath, temp_dir):
         return filepath
 
     logging.info(f"Extraindo áudio do vídeo: {filepath}")
-    output_path = os.path.join(temp_dir, "temp_audio.aac")
-
-    # Caminho para o executável ffmpeg na pasta bin
-    ffmpeg_executable = os.path.join('bin', 'ffmpeg.exe')  # Ajuste o caminho conforme necessário
+    output_path = os.path.join(temp_dir, "temp_audio.wav")  # Salvando em formato WAV
 
     try:
-        command = [ffmpeg_executable, '-i', filepath, '-vn', '-acodec', 'aac', output_path]
-        subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        input_container = av.open(filepath)
+        output_container = av.open(output_path, 'w')
+        output_stream = output_container.add_stream('pcm_s16le')
+
+        for frame in input_container.decode(audio=0):
+            packet = output_stream.encode(frame)
+            if packet:
+                output_container.mux(packet)
+
+        # Finalizar o encoder
+        packet = output_stream.encode(None)
+        if packet:
+            output_container.mux(packet)
+
+        input_container.close()
+        output_container.close()
         logging.info(f"Áudio extraído com sucesso para: {output_path}")
         return output_path
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Erro ao extrair áudio com ffmpeg: {e.stderr.decode()}")
+    except av.AVError as e:
+        logging.error(f"Erro ao extrair áudio com PyAV: {e}")
         raise
 
 def extrair_e_transcrever_arquivo(filepath, item, lista_arquivos):
