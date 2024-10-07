@@ -1,7 +1,37 @@
-# Classe personalizada para evitar a abertura de janelas de console no Windows
+import logging
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+from threading import Thread, Event
+from logging.handlers import RotatingFileHandler
+import whisper
+import warnings
+import os
+from docx import Document
+from plyer import notification
+import json
+import time
+import shutil
+import torch
+import requests
 import subprocess
 from platform import system
+import sys
 
+
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+
+# Função para gerenciar caminhos de recursos
+def resource_path(relative_path):
+    """Obtém o caminho absoluto para o recurso, funciona tanto para desenvolvimento quanto para empacotamento."""
+    try:
+        # PyInstaller cria um atributo _MEIPASS que aponta para a pasta temporária
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+# Classe personalizada para ocultar o console no Windows
 class NoConsolePopen(subprocess.Popen):
     """
     A custom Popen class that disables creation of a console window in Windows.
@@ -12,11 +42,65 @@ class NoConsolePopen(subprocess.Popen):
             kwargs['startupinfo'].dwFlags |= subprocess.STARTF_USESHOWWINDOW
         super().__init__(args, **kwargs)
 
-# Substituindo subprocess.Popen pela classe personalizada
+# Substituir subprocess.Popen pela classe personalizada
 subprocess.Popen = NoConsolePopen
 
+# Caminhos dos recursos
+CONFIG_FILE = resource_path("config.json")
+LOGS_DIR = resource_path("logs")
+TEMP_DIR = resource_path("temp")
+ICON_PATH = resource_path("bin/icon.ico")
 
-## Função usando para extrair áudio
+# Configuração do Logger
+def configurar_logger():
+    if not os.path.exists(LOGS_DIR):
+        os.makedirs(LOGS_DIR)
+        logging.info(f"Diretório de logs criado: {LOGS_DIR}")
+    
+    log_handler = RotatingFileHandler(os.path.join(LOGS_DIR, 'info.log'), maxBytes=5*1024*1024, backupCount=5)
+    log_handler.setLevel(logging.INFO)
+    log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    # Remover handlers existentes para evitar logs no console
+    if logger.hasHandlers():
+        logger.handlers.clear()
+    logger.addHandler(log_handler)
+
+# Configuração padrão
+DEFAULT_CONFIG = {
+    "model_path": "",
+    "language": "pt"
+}
+
+# Criar arquivo de configuração se não existir
+if not os.path.exists(CONFIG_FILE):
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(DEFAULT_CONFIG, f, indent=4)
+    configurar_logger()
+    logging.info(f"Arquivo de configuração criado: {CONFIG_FILE}")
+
+# Variáveis Globais
+config = {}
+cancelar_desgravacao = False
+threads = []
+stop_event = Event()
+transcricao_em_andamento = False
+confirm_dialog_open = False
+janela_qualidade = None
+janela_selecao = None
+janela_modelo = None
+
+# Carregar configuração
+try:
+    with open(CONFIG_FILE, 'r') as f:
+        config = json.load(f)
+except FileNotFoundError:
+    configurar_logger()
+    logging.error(f"Arquivo de configuração não encontrado: {CONFIG_FILE}")
+
+# Função para extrair áudio usando FFmpeg
 def extrair_audio(filepath, temp_dir):
     try:
         # Certificar-se de que o diretório temp existe
@@ -45,6 +129,7 @@ def extrair_audio(filepath, temp_dir):
         output_path = os.path.join(temp_dir, "temp_audio.aac")  # ./temp/temp_audio.aac
         output_path = os.path.abspath(output_path)
 
+        # Comando para extrair áudio usando FFmpeg
         command = ['ffmpeg', '-i', filepath, '-acodec', 'aac', output_path, '-y']
         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         logging.info(f"FFmpeg output: {result}")
@@ -59,72 +144,7 @@ def extrair_audio(filepath, temp_dir):
         logging.error(f"Erro ao extrair áudio com ffmpeg: {e.stderr.decode()}")
         raise
 
-
-## Código Completo Atualizado
-import logging
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from threading import Thread, Event
-from logging.handlers import RotatingFileHandler
-import whisper
-import warnings
-import os
-from docx import Document
-from plyer import notification
-import json
-import time
-import shutil
-import torch
-import requests
-
-warnings.filterwarnings("ignore", category=FutureWarning, message="FP16 is not supported on CPU; using FP32 instead")
-warnings.filterwarnings("ignore", category=UserWarning, message="FP16 is not supported on CPU; using FP32 instead")
-warnings.filterwarnings("ignore", category=FutureWarning, message="You are using `torch.load` with `weights_only=False`")
-CONFIG_FILE = "config.json"
-DEFAULT_CONFIG = {
-    "model_path": "",
-    "language": "pt"
-}
-
-if not os.path.exists(CONFIG_FILE):
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(DEFAULT_CONFIG, f, indent=4)
-    logging.info(f"Arquivo de configuração criado: {CONFIG_FILE}")
-
-# Variáveis Globais
-config = {}
-cancelar_desgravacao = False
-threads = []
-stop_event = Event()
-transcricao_em_andamento = False
-confirm_dialog_open = False
-janela_qualidade = None
-janela_selecao = None
-janela_modelo = None
-
-try:
-    with open(CONFIG_FILE, 'r') as f:
-        config = json.load(f)
-except FileNotFoundError:
-    pass
-
-def configurar_logger():
-    if not os.path.exists("logs"):
-        os.makedirs("logs")
-    
-    log_handler = RotatingFileHandler('logs/info.log', maxBytes=5*1024*1024, backupCount=5)
-    log_handler.setLevel(logging.INFO)
-    log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-    
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    # Remover handlers existentes para evitar logs no console
-    if logger.hasHandlers():
-        logger.handlers.clear()
-    logger.addHandler(log_handler)
-
-# Remover a segunda definição da função extrair_audio que usava PyAV
-
+# Função para extrair e transcrever arquivos
 def extrair_e_transcrever_arquivo(filepath, item, lista_arquivos):
     global cancelar_desgravacao
 
@@ -146,7 +166,7 @@ def extrair_e_transcrever_arquivo(filepath, item, lista_arquivos):
             lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Erro no modelo'))
         return
 
-    temp_dir = "./temp"
+    temp_dir = TEMP_DIR
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
         logging.info(f"Diretório temporário criado: {temp_dir}")
@@ -230,6 +250,7 @@ def extrair_e_transcrever_arquivo(filepath, item, lista_arquivos):
         if lista_arquivos.winfo_exists():
             lista_arquivos.after(0, lambda: lista_arquivos.set(item, 'Status', 'Erro'))
 
+# Função para transcrever arquivos em fila
 def transcrever_arquivos_em_fila(lista_arquivos, btn_iniciar, btn_adicionar):
     global cancelar_desgravacao, transcricao_em_andamento
     transcricao_em_andamento = True
@@ -262,7 +283,7 @@ def transcrever_arquivos_em_fila(lista_arquivos, btn_iniciar, btn_adicionar):
         if lista_arquivos.winfo_exists():
             status_values = lista_arquivos.item(item, 'values')
             if len(status_values) > 1:
-                status = status_values[1]
+                status = lista_arquivos.item(item, 'values')[1]
                 if status in ['Finalizado', 'Cancelado', 'Erro']:
                     continue  # Pular arquivos já processados
                 filepath = status_values[0]
@@ -294,6 +315,7 @@ def transcrever_arquivos_em_fila(lista_arquivos, btn_iniciar, btn_adicionar):
             messagebox.showinfo("Transcrição Concluída", "Todas as transcrições foram concluídas.")
     transcricao_em_andamento = False
 
+# Função para iniciar a transcrição
 def iniciar_transcricao(lista_arquivos, btn_iniciar, btn_adicionar):
     global cancelar_desgravacao
     cancelar_desgravacao = False
@@ -304,10 +326,21 @@ def iniciar_transcricao(lista_arquivos, btn_iniciar, btn_adicionar):
     thread.daemon = True  # Definir a thread como daemon
     thread.start()
 
+# Função para adicionar arquivos à lista
 def adicionar_arquivo(lista_arquivos):
-    filepaths = filedialog.askopenfilenames(title="Escolha os arquivos de áudio ou vídeo para transcrever",
-                                            filetypes=[("Arquivos suportados", "*.mp4;*.mp3;*.wav;*.mkv;*.aac;*.flac;*.m4a;*.ogg"),
-                                                       ("Arquivos MP4", "*.mp4"), ("Arquivos MP3", "*.mp3"), ("Arquivos WAV", "*.wav"), ("Arquivos AAC", "*.aac"), ("Arquivos FLAC", "*.flac"), ("Arquivos M4A", "*.m4a"), ("Arquivos OGG", "*.ogg")])
+    filepaths = filedialog.askopenfilenames(
+        title="Escolha os arquivos de áudio ou vídeo para transcrever",
+        filetypes=[
+            ("Arquivos suportados", "*.mp4;*.mp3;*.wav;*.mkv;*.aac;*.flac;*.m4a;*.ogg"),
+            ("Arquivos MP4", "*.mp4"), 
+            ("Arquivos MP3", "*.mp3"), 
+            ("Arquivos WAV", "*.wav"), 
+            ("Arquivos AAC", "*.aac"), 
+            ("Arquivos FLAC", "*.flac"), 
+            ("Arquivos M4A", "*.m4a"), 
+            ("Arquivos OGG", "*.ogg")
+        ]
+    )
     for filepath in filepaths:
         # Verificar se o arquivo já está na lista
         already_exists = False
@@ -319,6 +352,7 @@ def adicionar_arquivo(lista_arquivos):
             # Adicionar o arquivo à Treeview com status 'Preparado'
             lista_arquivos.insert('', 'end', values=(filepath, 'Preparado', ''))
 
+# Função para abrir o diretório do arquivo transcrito
 def abrir_local_do_arquivo(event, lista_arquivos):
     item = lista_arquivos.identify_row(event.y)
     if item:
@@ -334,6 +368,7 @@ def abrir_local_do_arquivo(event, lista_arquivos):
         else:
             messagebox.showinfo("Informação", "O arquivo ainda não foi transcrito.")
 
+# Função para selecionar o modelo Whisper manualmente
 def selecionar_modelo():
     global janela_modelo
     if janela_modelo and janela_modelo.winfo_exists():
@@ -353,7 +388,10 @@ def selecionar_modelo():
     entry.pack(pady=10)
 
     def escolher_modelo():
-        filepath = filedialog.askopenfilename(title="Selecionar Modelo Whisper", filetypes=[("Modelo Whisper", "*.pt")])
+        filepath = filedialog.askopenfilename(
+            title="Selecionar Modelo Whisper", 
+            filetypes=[("Modelo Whisper", "*.pt")]
+        )
         if filepath:
             model_path_var_local.set(filepath)
             try:
@@ -371,6 +409,7 @@ def selecionar_modelo():
     btn_escolher = ttk.Button(janela_modelo, text="Escolher Modelo", command=escolher_modelo)
     btn_escolher.pack(pady=10)
 
+# Função para verificar se o modelo inicial está configurado
 def verificar_modelo_inicial():
     model_path = config.get('model_path')
     if model_path:
@@ -384,6 +423,7 @@ def verificar_modelo_inicial():
     else:
         selecionar_qualidade()
 
+# Função para selecionar a qualidade do modelo e baixar se necessário
 def selecionar_qualidade():
     global janela_qualidade
     if janela_qualidade and janela_qualidade.winfo_exists():
@@ -398,7 +438,7 @@ def selecionar_qualidade():
     label.pack(pady=20)
 
     modelos = {
-        "small":"https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt",
+        "small": "https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt",
         "medium": "https://openaipublic.azureedge.net/main/whisper/models/345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/medium.pt",
         "large-v1": "https://openaipublic.azureedge.net/main/whisper/models/e4b87e7e0bf463eb8e6956e646f1e277e901512310def2c24bf0e11bd3c28e9a/large-v1.pt",
         "large-v2": "https://openaipublic.azureedge.net/main/whisper/models/81f7c96c852ee8fc832187b0132e569d6c3065a3252ed18e56effd0b6a73e524/large-v2.pt",
@@ -414,7 +454,7 @@ def selecionar_qualidade():
     def baixar_modelo():
         modelo_selecionado = qualidade_var.get()
         url = modelos[modelo_selecionado]
-        diretorio_modelo = ".model/"
+        diretorio_modelo = resource_path(".model")
         if not os.path.exists(diretorio_modelo):
             os.makedirs(diretorio_modelo)
         caminho_modelo = os.path.join(diretorio_modelo, f"{modelo_selecionado}.pt")
@@ -504,6 +544,7 @@ def selecionar_qualidade():
     btn_baixar = ttk.Button(janela_qualidade, text="Selecionar Modelo", command=baixar_modelo)
     btn_baixar.pack(pady=10)
 
+# Função para fechar a aplicação
 def on_closing():
     global cancelar_desgravacao
     cancelar_desgravacao = True
@@ -511,20 +552,25 @@ def on_closing():
     # Não espera as threads terminarem
     root.destroy()
 
+# Configurar o logger antes de iniciar a GUI
 configurar_logger()
 
+# Configuração da janela principal
 root = tk.Tk()
-root.title("TextifyVoice [ Beta ] by@felipe.sh")
+root.title("TextifyVoice [ 1.0 ] by@felipe.sh")
 
 root.geometry("650x500")
 
 # Verifique se o caminho do ícone está correto
-if os.path.exists('./bin/icon.ico'):
-    root.iconbitmap('./bin/icon.ico')
+if os.path.exists(ICON_PATH):
+    root.iconbitmap(ICON_PATH)
+else:
+    logging.error(f"Ícone não encontrado em: {ICON_PATH}")
 
 cor_fundo = "#343a40"
 root.configure(bg=cor_fundo)
 
+# Configuração de estilos
 style = ttk.Style()
 style.theme_use('clam')
 
@@ -541,6 +587,7 @@ style.configure("Title.TLabel", background=cor_fundo, foreground=cor_frente, fon
 style.map("TButton", relief=[("pressed", "sunken"), ("active", "raised")])
 style.map("Modelo.TButton", relief=[("pressed", "sunken"), ("active", "raised")])
 
+# Frame do título
 title_frame = ttk.Frame(root, style="TFrame", height=70)
 title_frame.pack(side=tk.TOP, fill=tk.X)
 title_frame.pack_propagate(False)
@@ -548,17 +595,21 @@ title_frame.pack_propagate(False)
 titulo = ttk.Label(title_frame, text="TextifyVoice", style="Title.TLabel", anchor="center")
 titulo.pack(side=tk.TOP, fill=tk.X, pady=20)
 
+# Frame principal
 frame = ttk.Frame(root, style="TFrame")
 frame.pack(expand=True, fill=tk.BOTH, padx=20, pady=20)
 
+# Label de instrução
 text_var = tk.StringVar()
 text_var.set("Selecione os arquivos de áudio ou vídeo para transcrever.")
 text_label = ttk.Label(frame, textvariable=text_var, wraplength=650, style="TLabel")
 text_label.pack()
 
+# Variável para o caminho do modelo
 model_path = config.get('model_path')
 model_path_var = tk.StringVar(value=model_path)
 
+# Botões de seleção
 btn_select = ttk.Button(frame, text="Selecionar Arquivos", style="TButton")
 btn_qualidade = ttk.Button(frame, text="Selecionar Qualidade", command=selecionar_qualidade, style="Modelo.TButton")
 
@@ -566,10 +617,13 @@ btn_select.config(command=lambda: abrir_janela_selecao_arquivos())
 btn_select.pack(pady=(10, 0))
 btn_qualidade.pack(pady=(10, 0))
 
+# Protocolo para fechar a aplicação
 root.protocol("WM_DELETE_WINDOW", on_closing)
 
+# Verificar o modelo inicial após iniciar a GUI
 root.after(10, verificar_modelo_inicial)
 
+# Função para abrir a janela de seleção de arquivos
 def abrir_janela_selecao_arquivos():
     global janela_selecao, transcricao_em_andamento, confirm_dialog_open, cancelar_desgravacao
     if janela_selecao and janela_selecao.winfo_exists():
@@ -646,4 +700,5 @@ def abrir_janela_selecao_arquivos():
     janela_selecao.bind("<Unmap>", on_iconify)
     janela_selecao.bind("<Map>", on_iconify)
 
+# Iniciar a interface gráfica
 root.mainloop()
