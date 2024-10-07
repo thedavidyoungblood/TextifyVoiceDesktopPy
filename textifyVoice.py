@@ -375,38 +375,73 @@ def selecionar_modelo():
         return
     janela_modelo = tk.Toplevel()
     janela_modelo.title("Selecionar Modelo Whisper")
-    janela_modelo.geometry("400x200")
+    janela_modelo.geometry("500x300")
     janela_modelo.grab_set()
 
     label = ttk.Label(janela_modelo, text="Selecione o modelo Whisper:")
-    label.pack(pady=20)
+    label.pack(pady=10)
 
     model_path_var_local = tk.StringVar(value=config.get('model_path', ''))
 
-    entry = ttk.Entry(janela_modelo, textvariable=model_path_var_local, width=50)
-    entry.pack(pady=10)
+    # Verificar se existem modelos na pasta './model'
+    diretorio_modelo = resource_path(".model")
+    modelos_disponiveis = []
+    if os.path.exists(diretorio_modelo):
+        for filename in os.listdir(diretorio_modelo):
+            if filename.endswith(".pt"):
+                caminho_modelo = os.path.join(diretorio_modelo, filename)
+                try:
+                    whisper.load_model(caminho_modelo)
+                    modelos_disponiveis.append(caminho_modelo)
+                except Exception as e:
+                    logging.error(f"Erro ao carregar o modelo {caminho_modelo}: {e}")
 
-    def escolher_modelo():
-        filepath = filedialog.askopenfilename(
-            title="Selecionar Modelo Whisper", 
-            filetypes=[("Modelo Whisper", "*.pt")]
-        )
-        if filepath:
-            model_path_var_local.set(filepath)
-            try:
-                whisper.load_model(filepath)
-                config['model_path'] = filepath
-                with open(CONFIG_FILE, 'w') as f:
-                    json.dump(config, f)
-                model_path_var.set(filepath)
-                messagebox.showinfo("Sucesso", "Modelo carregado e o caminho foi salvo com sucesso!")
-                janela_modelo.destroy()
-            except Exception as e:
-                messagebox.showerror("Erro", f"Erro ao carregar o modelo: {e}")
-                logging.error(f"Erro ao carregar o modelo selecionado: {e}")
+    if modelos_disponiveis:
+        # Mostrar modelos disponíveis em uma Combobox
+        selected_model = tk.StringVar()
+        label_modelos = ttk.Label(janela_modelo, text="Modelos disponíveis na pasta '.model':")
+        label_modelos.pack(pady=5)
+        combo_modelos = ttk.Combobox(janela_modelo, textvariable=selected_model, values=modelos_disponiveis, state='readonly', width=50)
+        combo_modelos.pack(pady=5)
+        combo_modelos.current(0)
 
-    btn_escolher = ttk.Button(janela_modelo, text="Escolher Modelo", command=escolher_modelo)
-    btn_escolher.pack(pady=10)
+        def confirmar_modelo():
+            caminho_selecionado = selected_model.get()
+            config['model_path'] = caminho_selecionado
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump(config, f)
+            model_path_var.set(caminho_selecionado)
+            messagebox.showinfo("Sucesso", "Modelo selecionado com sucesso!")
+            janela_modelo.destroy()
+
+        btn_confirmar = ttk.Button(janela_modelo, text="Confirmar Modelo", command=confirmar_modelo)
+        btn_confirmar.pack(pady=10)
+    else:
+        # Caso não existam modelos, permitir que o usuário selecione manualmente
+        label_sem_modelo = ttk.Label(janela_modelo, text="Nenhum modelo encontrado na pasta '.model'.")
+        label_sem_modelo.pack(pady=5)
+
+        def escolher_modelo():
+            filepath = filedialog.askopenfilename(
+                title="Selecionar Modelo Whisper", 
+                filetypes=[("Modelo Whisper", "*.pt")]
+            )
+            if filepath:
+                model_path_var_local.set(filepath)
+                try:
+                    whisper.load_model(filepath)
+                    config['model_path'] = filepath
+                    with open(CONFIG_FILE, 'w') as f:
+                        json.dump(config, f)
+                    model_path_var.set(filepath)
+                    messagebox.showinfo("Sucesso", "Modelo carregado e o caminho foi salvo com sucesso!")
+                    janela_modelo.destroy()
+                except Exception as e:
+                    messagebox.showerror("Erro", f"Erro ao carregar o modelo: {e}")
+                    logging.error(f"Erro ao carregar o modelo selecionado: {e}")
+
+        btn_escolher = ttk.Button(janela_modelo, text="Escolher Modelo", command=escolher_modelo)
+        btn_escolher.pack(pady=10)
 
 # Função para verificar se o modelo inicial está configurado
 def verificar_modelo_inicial():
@@ -663,7 +698,7 @@ btn_qualidade.pack(pady=(10, 0))
 root.protocol("WM_DELETE_WINDOW", on_closing)
 
 # Verificar o modelo inicial após iniciar a GUI
-root.after(10, verificar_modelo_inicial)
+root.after(10, verificar_modelo_inicial())
 
 # Função para abrir a janela de seleção de arquivos
 def abrir_janela_selecao_arquivos():

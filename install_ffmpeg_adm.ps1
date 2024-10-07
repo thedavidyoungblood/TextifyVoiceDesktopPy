@@ -2,6 +2,11 @@ param (
     [switch]$webdl
 )
 
+if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
+    Write-Host "FFmpeg já está instalado e disponível no sistema."
+    Exit 0
+}
+
 $arguments = [System.Environment]::GetCommandLineArgs()
 
 # Definir o diretório de instalação no perfil do usuário

@@ -1,13 +1,17 @@
-# Salve este conteúdo em um arquivo com a extensão .ps1, por exemplo, Install-FFmpeg.ps1
-
 param (
     [switch]$webdl
 )
 
+# Verificar se o ffmpeg já está disponível
+if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
+    Write-Host "FFmpeg já está instalado e disponível no sistema."
+    Exit 0
+}
+
 # Definir o diretório de instalação no perfil do usuário
 $ffmpegPath = Join-Path -Path $env:USERPROFILE -ChildPath "ffmpeg"
 
-# Criar o diretório de instalação
+# Criar o diretório de instalação se não existir
 if (-Not (Test-Path -Path $ffmpegPath)) {
     New-Item -Type Directory -Path $ffmpegPath -Force | Out-Null
 }
@@ -58,7 +62,7 @@ if ($extractedFolder) {
         Write-Host "Limpando arquivos temporários..."
         Remove-Item $extractedFolder.FullName -Recurse -Force
     } else {
-        Write-Host "Erro: A pasta 'bin' não foi encontrada dentro de '$($extractedFolder.FullName)'."
+        Write-Host "Erro: A pasta 'bin' não foi encontrada dentro de '$($extractedFolder.FullName)'." 
         Exit 1
     }
 } else {
