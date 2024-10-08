@@ -1,146 +1,249 @@
-# TextifyVoice [Beta]
+# TextifyVoice
 
-TextifyVoice é uma aplicação GUI (Interface Gráfica de Usuário) que permite transcrever arquivos de áudio e vídeo em texto utilizando o modelo Whisper da OpenAI. Ideal para transcrever entrevistas, palestras, aulas e outros conteúdos de áudio e vídeo em formato de texto de maneira fácil e rápida.
+TextifyVoice é uma aplicação desenvolvida em Python que permite transcrever arquivos de áudio e vídeo em texto, utilizando o modelo Whisper da OpenAI. A aplicação possui uma interface gráfica construída com Tkinter, facilitando a interação do usuário.
 
 ## Índice
 
-- [Recursos](#recursos)
-- [Capturas de Tela](#capturas-de-tela)
-- [Requisitos](#requisitos)
+- [Descrição Geral](#descrição-geral)
+- [Funcionalidades](#funcionalidades)
+- [Arquitetura do Código](#arquitetura-do-código)
 - [Instalação](#instalação)
-- [Como Usar](#como-usar)
-- [Compilação do Executável](#compilação-do-executável)
+- [Uso](#uso)
+- [Dependências](#dependências)
+- [Logs](#logs)
+- [Erros Comuns](#erros-comuns)
 - [Contribuição](#contribuição)
 - [Licença](#licença)
+- [Autor](#autor)
 
-## Recursos
+## Descrição Geral
 
-- **Transcrição de Áudio e Vídeo**: Suporta diversos formatos como `.mp4`, `.mp3`, `.wav`, `.mkv`, `.aac`, `.flac`, `.m4a`, `.ogg`.
-- **Interface Intuitiva**: Desenvolvido com Tkinter para proporcionar uma experiência amigável ao usuário.
-- **Seleção de Qualidade do Modelo**: Escolha entre diferentes modelos de transcrição (small, medium, large) de acordo com suas necessidades.
-- **Processamento em Lote**: Adicione múltiplos arquivos para transcrição em fila.
-- **Gerenciamento de Transcrições**: Acompanhe o status de cada arquivo e acesse facilmente os resultados.
-- **Personalização**: Possibilidade de selecionar e baixar modelos específicos do Whisper.
+A aplicação tem como objetivo facilitar o processo de transcrição de arquivos de áudio e vídeo, suportando diversos formatos e utilizando modelos de transcrição de alta qualidade. O usuário pode selecionar arquivos, escolher o modelo de transcrição e acompanhar o progresso da transcrição em tempo real.
 
-## Capturas de Tela
+## Funcionalidades
 
-![alt text](image.png)
+- **Suporte a Múltiplos Formatos**: MP4, MP3, WAV, MKV, AAC, FLAC, M4A, OGG.
+- **Interface Gráfica Intuitiva**: Desenvolvida com Tkinter.
+- **Seleção de Modelo Whisper**: Possibilidade de selecionar entre diferentes modelos e qualidades.
+- **Download Automático de Modelos**: Baixa modelos necessários caso não estejam disponíveis localmente.
+- **Suporte a GPU**: Utiliza aceleração por GPU se disponível.
+- **Gerenciamento de Transcrições**: Permite adicionar múltiplos arquivos à fila de transcrição.
+- **Cancelamento de Transcrição**: Possibilidade de cancelar transcrições em andamento.
 
-## Requisitos
+## Arquitetura do Código
 
-- **Sistema Operacional**: Windows 7 ou superior.
-- **Python**: 3.7 ou superior.
-- **Dependências Python**:
-  - `tkinter`
-  - `whisper`
-  - `torch`
-  - `requests`
-  - `python-docx`
-  - `plyer`
+### Estrutura Geral
 
-- **FFmpeg**: O binário `ffmpeg.exe` deve estar disponível na pasta `bin` do projeto.
+- **Módulos e Bibliotecas**:
+  - `tkinter` e `ttk`: Construção da interface gráfica.
+  - `whisper`: Modelo de transcrição de áudio para texto.
+  - `torch`: Verificação de disponibilidade de GPU.
+  - `docx`: Criação e manipulação de documentos `.docx`.
+  - `subprocess`: Execução de comandos do sistema, como o FFmpeg.
+  - `threading`: Gerenciamento de threads para operações assíncronas.
+  - `logging`: Registro e gerenciamento de logs.
+  - `json`: Leitura e escrita de arquivos de configuração.
+  - `requests`: Download de modelos pela internet.
+
+### Organização do Código
+
+- **Funções Utilitárias**:
+  - `resource_path(relative_path)`: Gerencia caminhos de recursos, especialmente quando a aplicação é empacotada com ferramentas como PyInstaller.
+  - `configurar_logger()`: Configura o sistema de logging, incluindo o formato e a rotação de arquivos de log.
+
+- **Classes Personalizadas**:
+  - `NoConsolePopen`: Subclasse de `subprocess.Popen` que impede a abertura de janelas de console no Windows durante a execução de comandos do FFmpeg.
+
+- **Funções Principais**:
+  - `extrair_audio(filepath, temp_dir)`: Extrai o áudio de um arquivo de vídeo utilizando o FFmpeg.
+  - `extrair_e_transcrever_arquivo(filepath, item, lista_arquivos)`: Gerencia o processo completo de extração de áudio e transcrição de um arquivo específico.
+  - `transcrever_arquivos_em_fila(lista_arquivos, btn_iniciar, btn_adicionar)`: Processa todos os arquivos na fila de transcrição.
+  - `iniciar_transcricao(lista_arquivos, btn_iniciar, btn_adicionar)`: Inicia o processo de transcrição em uma thread separada.
+  - `adicionar_arquivo(lista_arquivos)`: Abre um diálogo para o usuário selecionar arquivos a serem adicionados à lista.
+  - `abrir_local_do_arquivo(event, lista_arquivos)`: Abre o diretório onde o arquivo transcrito foi salvo.
+  - `selecionar_modelo()`: Permite ao usuário selecionar manualmente um modelo Whisper existente.
+  - `verificar_modelo_inicial()`: Verifica se um modelo padrão está configurado e carrega-o.
+  - `selecionar_qualidade()`: Interface para seleção e download de modelos Whisper de diferentes qualidades.
+
+### Gerenciamento de Estados e Eventos
+
+- **Variáveis Globais**:
+  - `cancelar_desgravacao`: Controla o cancelamento das transcrições.
+  - `transcricao_em_andamento`: Indica se uma transcrição está em progresso.
+  - `threads`: Lista de threads ativas para gerenciamento.
+
+- **Eventos**:
+  - `Event()`: Utilizado para sinalizar o encerramento de threads e operações.
+
+### Interface Gráfica
+
+- **Janela Principal**:
+  - Contém botões para selecionar arquivos e escolher a qualidade do modelo.
+  - Exibe o caminho do modelo atual selecionado.
+
+- **Janela de Seleção de Arquivos**:
+  - Permite adicionar arquivos à fila de transcrição.
+  - Mostra uma lista dos arquivos com seus respectivos status.
+  - Possibilita iniciar ou cancelar a transcrição.
+
+- **Janela de Seleção de Qualidade**:
+  - Oferece opções de modelos Whisper para download.
+  - Mostra o progresso do download do modelo selecionado.
+
+### Fluxo de Execução
+
+1. **Inicialização**:
+   - Configura o logger e carrega as configurações iniciais.
+   - Verifica se um modelo padrão está configurado e disponível.
+
+2. **Interação do Usuário**:
+   - O usuário seleciona arquivos e o modelo de transcrição desejado.
+   - Inicia o processo de transcrição.
+
+3. **Processamento**:
+   - Para cada arquivo, extrai o áudio se necessário.
+   - Transcreve o áudio utilizando o modelo Whisper.
+   - Salva a transcrição em um arquivo `.docx`.
+
+4. **Finalização**:
+   - Atualiza o status de cada arquivo na interface.
+   - Permite ao usuário abrir o local do arquivo transcrito.
 
 ## Instalação
+
+### Passos
 
 1. **Clone o Repositório**:
 
    ```bash
-   git clone https://github.com/finnzao/WhisperDesktopPy.git
+   git clone https://github.com/seu_usuario/textifyvoice.git
    cd textifyvoice
    ```
 
-2. **Crie um Ambiente Virtual (Opcional, mas Recomendado)**:
+2. **Crie um Ambiente Virtual (Opcional)**:
 
    ```bash
    python -m venv venv
-   venv\Scripts\activate  # No Windows
-   # source venv/bin/activate  # No Linux/Mac
+   source venv/bin/activate  # Linux/Mac
+   venv\Scripts\activate  # Windows
    ```
 
 3. **Instale as Dependências**:
 
-   ```bash
-   pip install whisper torch requests python-docx plyer
-   ```
+4. **Instale o FFmpeg**:
 
-   
+   - **Windows**:
+     - Clique no executavel `setup.exe` para instalar ffmpeg como uma variavel de perfil.
 
-4. **Configure o FFmpeg**:
 
-   - Baixe o binário estático do FFmpeg em [ffmpeg.org](https://ffmpeg.org/download.html).
-   - Coloque o arquivo `ffmpeg.exe` na pasta `bin` do projeto.
-
-## Como Usar
-
-1. **Execute o Aplicativo**:
+5. **Execute a Aplicação**:
 
    ```bash
-   python your_script.py
+   python textifyvoice.py
    ```
 
-2. **Selecione a Qualidade do Modelo**:
+## Uso
 
-   - Ao abrir o aplicativo pela primeira vez, aparecerá a janela **"Selecionar Qualidade"**.
-   - Escolha o modelo desejado (por exemplo, `medium`) e clique em **"Selecionar Modelo"**.
-   - O modelo será baixado automaticamente. Aguarde até que o download seja concluído.
+1. **Inicie a Aplicação**:
 
-3. **Selecione Arquivos para Transcrição**:
+   - A interface principal será exibida com opções para selecionar arquivos e ajustar configurações.
 
-   - Na tela principal, clique em **"Selecionar Arquivos"**.
-   - Adicione os arquivos de áudio ou vídeo que deseja transcrever.
+2. **Selecione os Arquivos**:
+
+   - Clique em **"Selecionar Arquivos"** para abrir a janela de seleção.
+   - Na janela de seleção, clique em **"Adicionar Arquivo"** e escolha os arquivos desejados.
    - Os arquivos aparecerão em uma lista com o status **"Preparado"**.
+
+3. **Selecione a Qualidade do Modelo**:
+
+   - Opcionalmente, clique em **"Selecionar Qualidade"** para escolher a qualidade do modelo Whisper.
+   - Se o modelo não estiver disponível localmente, a aplicação oferecerá a opção de download.
 
 4. **Inicie a Transcrição**:
 
-   - Clique em **"Iniciar Transcrição"** para começar o processo.
-   - Acompanhe o status de cada arquivo na lista:
-     - **Preparado**: Pronto para transcrição.
-     - **Aguardando processamento**: Na fila para ser transcrito.
-     - **Em processamento...**: Transcrição em andamento.
-     - **Finalizado**: Transcrição concluída com sucesso.
-     - **Erro**: Ocorreu um problema durante a transcrição.
-     - **Cancelado**: Transcrição cancelada pelo usuário.
+   - Na janela de seleção, clique em **"Iniciar Transcrição"**.
+   - O status de cada arquivo será atualizado conforme o progresso.
 
-5. **Visualize os Resultados**:
+5. **Acompanhe o Progresso**:
 
-   - Após a transcrição ser finalizada, dê um duplo clique no arquivo com status **"Finalizado"**.
-   - Isso abrirá o diretório onde o arquivo transcrito foi salvo.
-   - Os arquivos transcritos são salvos na mesma pasta do arquivo original, com o sufixo `_text.docx`.
+   - O status dos arquivos mudará para **"Em processamento..."**, **"Finalizado"**, ou **"Erro"**.
+   - Duplo clique em um arquivo com status **"Finalizado"** para abrir o diretório do arquivo transcrito.
 
-## Compilação do Executável
+6. **Transcrições**:
 
-Para distribuir o aplicativo sem a necessidade de instalar o Python, você pode criar um executável usando o PyInstaller.
+   - As transcrições são salvas no mesmo diretório dos arquivos originais com o sufixo `_text.docx`.
 
-1. **Instale o PyInstaller**:
+## Dependências
+
+- **Pacotes Python**:
+
+  - `tkinter`: Interface gráfica.
+  - `whisper`: Modelo de transcrição.
+  - `torch`: Suporte a GPU.
+  - `python-docx`: Manipulação de arquivos `.docx`.
+  - `requests`: Download de modelos.
+  - `ffmpeg-python` (opcional): Integração com FFmpeg.
+
+- **Outras Dependências**:
+
+  - **FFmpeg**: Necessário para extração de áudio.
+  - **CUDA** (Opcional): Para aceleração por GPU.
+
+## Logs
+
+- Os logs são armazenados na pasta `logs/`, com o arquivo principal sendo `info.log`.
+- Utiliza `RotatingFileHandler` para limitar o tamanho dos arquivos de log e manter backups.
+
+## Erros Comuns
+
+- **Modelo Não Encontrado**:
+
+  - Certifique-se de que o modelo Whisper está corretamente configurado.
+  - Utilize a opção **"Selecionar Qualidade"** para baixar e configurar o modelo.
+
+- **FFmpeg Não Encontrado**:
+
+  - Verifique se o FFmpeg está instalado e se o executável está no `PATH` do sistema.
+
+- **Erro ao Carregar o Modelo**:
+
+  - Verifique a compatibilidade do modelo com a versão do Whisper instalada.
+  - Certifique-se de que o arquivo do modelo não está corrompido.
+
+- **Transcrição Não Inicia**:
+
+  - Verifique se todos os arquivos adicionados são suportados.
+  - Consulte os logs para detalhes específicos do erro.
+
+## Contribuição
+
+Contribuições são bem-vindas! Sinta-se à vontade para abrir issues e pull requests para melhorar este projeto.
+
+### Como Contribuir
+
+1. **Fork o Repositório**.
+2. **Crie uma Branch**:
 
    ```bash
-   pip install pyinstaller
+   git checkout -b feature/nova-funcionalidade
    ```
 
-2. **Prepare o Comando de Compilação**:
-
-   - Certifique-se de que todos os caminhos estão corretos e que os arquivos necessários estão disponíveis.
-
-3. **Crie o Executável**:
+3. **Commit suas Alterações**:
 
    ```bash
-   pyinstaller --windowed --hidden-import=whisper --icon="./bin/icon.ico" \
-   --add-data=".bin/ffmpeg.exe;bin" \
-   --add-data="config.json;." \
-   your_script.py
+   git commit -m "Adiciona nova funcionalidade"
    ```
 
-   **Explicação dos Parâmetros**:
+4. **Envie para o Repositório Remoto**:
 
-   - `--windowed`: O executável será criado sem uma janela de console.
-   - `--hidden-import=whisper`: Inclui o módulo `whisper` que pode não ser detectado automaticamente.
-   - `--icon="./bin/icon.ico"`: Define o ícone do executável.
-   - `--add-data`: Inclui arquivos adicionais necessários (como `ffmpeg.exe` e `config.json`).
-   - `your_script.py`: O nome do arquivo principal do seu aplicativo.
+   ```bash
+   git push origin feature/nova-funcionalidade
+   ```
 
-4. **Distribua o Aplicativo**:
+5. **Abra um Pull Request**.
 
-   - Após a compilação, a pasta `dist` conterá o executável.
-   - Distribua essa pasta para os usuários.
 
+## Autor
+
+Desenvolvido por [Felipe](https://github.com/finnzao).
 
