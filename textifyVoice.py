@@ -16,7 +16,6 @@ import subprocess
 from platform import system
 import sys
 
-
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -49,6 +48,14 @@ CONFIG_FILE = resource_path("config.json")
 LOGS_DIR = resource_path("logs")
 TEMP_DIR = resource_path("temp")
 ICON_PATH = resource_path("bin/icon.ico")
+
+# Definir o caminho para o executável do FFmpeg
+if system() == 'Windows':
+    FFMPEG_EXECUTABLE = 'ffmpeg.exe'
+else:
+    FFMPEG_EXECUTABLE = 'ffmpeg'
+
+FFMPEG_PATH = resource_path(FFMPEG_EXECUTABLE)
 
 # Configuração do Logger
 def configurar_logger():
@@ -102,6 +109,11 @@ except FileNotFoundError:
 # Função para extrair áudio usando FFmpeg
 def extrair_audio(filepath, temp_dir):
     try:
+        # Verificar se o executável do FFmpeg existe
+        if not os.path.exists(FFMPEG_PATH):
+            logging.error(f"Executável do FFmpeg não encontrado em: {FFMPEG_PATH}")
+            raise FileNotFoundError(f"Executável do FFmpeg não encontrado em: {FFMPEG_PATH}")
+
         # Certificar-se de que o diretório temp existe
         if not os.path.exists(temp_dir):
             os.makedirs(temp_dir)
@@ -129,18 +141,18 @@ def extrair_audio(filepath, temp_dir):
         output_path = os.path.abspath(output_path)
 
         # Comando para extrair áudio usando FFmpeg
-        command = ['ffmpeg', '-i', filepath, '-acodec', 'aac', output_path, '-y']
+        command = [FFMPEG_PATH, '-i', filepath, '-acodec', 'aac', output_path, '-y']
         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        logging.info(f"FFmpeg output: {result}")
+        logging.info(f"Saída do FFmpeg: {result}")
 
         if result.returncode != 0:
-            logging.error(f"Erro ao extrair áudio com ffmpeg: {result.stderr.decode()}")
+            logging.error(f"Erro ao extrair áudio com FFmpeg: {result.stderr.decode()}")
             raise subprocess.CalledProcessError(result.returncode, command, output=result.stdout, stderr=result.stderr)
 
         logging.info(f"Áudio extraído com sucesso para: {output_path}")
         return output_path
     except subprocess.CalledProcessError as e:
-        logging.error(f"Erro ao extrair áudio com ffmpeg: {e.stderr.decode()}")
+        logging.error(f"Erro ao extrair áudio com FFmpeg: {e.stderr.decode()}")
         raise
 
 # Função para extrair e transcrever arquivos

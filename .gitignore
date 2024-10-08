@@ -10,5 +10,5 @@ ffmpeg
 temp
 *.log
 .model
-*.exe
+ffmpeg.exe
 *.png
