@@ -21,6 +21,11 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
+class TranscriptionCancelledException(Exception):
+    """Exceção personalizada para indicar cancelamento da transcrição."""
+    pass
+
+
 class Config:
     """Classe para gerenciar configurações do aplicativo"""
 
@@ -51,7 +56,8 @@ class Config:
             with open(self.CONFIG_FILE, 'r') as f:
                 return json.load(f)
         except FileNotFoundError:
-            logging.error(f"Arquivo de configuração não encontrado: {self.CONFIG_FILE}")
+            logging.error(
+                f"Arquivo de configuração não encontrado: {self.CONFIG_FILE}")
             return self.DEFAULT_CONFIG.copy()
 
     def save_config(self):
@@ -123,38 +129,6 @@ class AudioProcessor:
                 logging.error(f'Falha ao deletar {file_path}. Motivo: {e}')
 
 
-def transcribe_file_process(model_path, config_dict, filepath, temp_dir, result_queue):
-    try:
-        # Carrega o modelo no novo processo
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        model = whisper.load_model(model_path, device=device)
-
-        # Cria um AudioProcessor
-        config = Config()
-        config.config = config_dict  # Usa a configuração passada
-        audio_processor = AudioProcessor(config)
-
-        audio_path = audio_processor.extract_audio(
-            filepath, temp_dir)
-        result = model.transcribe(audio_path, language="pt")
-
-        nome_arquivo = os.path.splitext(os.path.basename(filepath))[0]
-        local_salvamento = os.path.join(os.path.dirname(
-            filepath), nome_arquivo + "_text.docx")
-
-        doc = Document()
-        for segment in result["segments"]:
-            doc.add_paragraph(segment["text"])
-        doc.save(local_salvamento)
-
-        if audio_path != filepath:
-            os.remove(audio_path)
-
-        result_queue.put({'output_path': local_salvamento})
-    except Exception as e:
-        result_queue.put({'error': str(e)})
-
-
 class TranscriptionManager:
     """Classe para gerenciar transcrições"""
 
@@ -192,7 +166,8 @@ class TranscriptionManager:
             # Verifica o tamanho do arquivo
             file_size = os.path.getsize(model_path)
             if file_size < 1000000:  # Menos de 1MB provavelmente está corrompido
-                logging.error(f"Arquivo do modelo parece estar incompleto: {file_size} bytes")
+                logging.error(
+                    f"Arquivo do modelo parece estar incompleto: {file_size} bytes")
                 return False
 
             # Tenta carregar o modelo para verificar integridade
@@ -222,7 +197,7 @@ class TranscriptionManager:
             result_queue = Queue()
             # Inicia a transcrição em um novo processo
             self.transcription_process = Process(
-                target=transcribe_file_process,
+                target=self.transcribe_file_process,
                 args=(
                     model_path,
                     self.config.config,
@@ -234,14 +209,16 @@ class TranscriptionManager:
             self.transcription_process.start()
 
             # Aguarda o processo terminar
-            while self.transcription_process.is_alive():
+            while self.transcription_process is not None and self.transcription_process.is_alive():
                 time.sleep(0.5)
                 if self.cancel_transcription:
-                    self.transcription_process.terminate()
-                    self.transcription_process.join()
-                    self.transcription_process = None
+                    if self.transcription_process is not None and self.transcription_process.is_alive():
+                        self.transcription_process.terminate()
+                        self.transcription_process.join()
+                        self.transcription_process = None
                     self.cancel_transcription = False  # Reseta a flag após o cancelamento
-                    raise Exception("Transcrição cancelada pelo usuário")
+                    raise TranscriptionCancelledException(
+                        "Transcrição cancelada pelo usuário")
 
             # Obtém o resultado da fila
             if not result_queue.empty():
@@ -254,16 +231,53 @@ class TranscriptionManager:
                         output_callback(output_path)
                     return output_path
             else:
-                raise Exception("Processo de transcrição não retornou nenhum resultado.")
+                raise Exception(
+                    "Processo de transcrição não retornou nenhum resultado.")
 
+        except TranscriptionCancelledException:
+            raise
         except Exception as e:
             logging.error(f"Erro na transcrição: {str(e)}")
             raise
         finally:
             # Limpeza
-            if self.transcription_process:
+            if self.transcription_process is not None:
+                if self.transcription_process.is_alive():
+                    self.transcription_process.join()
                 self.transcription_process = None
             self.cancel_transcription = False  # Reseta a flag
+
+    @staticmethod
+    def transcribe_file_process(model_path, config_dict, filepath, temp_dir, result_queue):
+        try:
+            # Carrega o modelo no novo processo
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            model = whisper.load_model(model_path, device=device)
+
+            # Cria um AudioProcessor
+            config = Config()
+            config.config = config_dict  # Usa a configuração passada
+            audio_processor = AudioProcessor(config)
+
+            audio_path = audio_processor.extract_audio(
+                filepath, temp_dir)
+            result = model.transcribe(audio_path, language="pt")
+
+            nome_arquivo = os.path.splitext(os.path.basename(filepath))[0]
+            local_salvamento = os.path.join(os.path.dirname(
+                filepath), nome_arquivo + "_text.docx")
+
+            doc = Document()
+            for segment in result["segments"]:
+                doc.add_paragraph(segment["text"])
+            doc.save(local_salvamento)
+
+            if audio_path != filepath:
+                os.remove(audio_path)
+
+            result_queue.put({'output_path': local_salvamento})
+        except Exception as e:
+            result_queue.put({'error': str(e)})
 
 
 class ModelDownloader:
@@ -309,11 +323,13 @@ class ModelDownloader:
         if os.path.exists(caminho_modelo):
             try:
                 if self.verify_download(caminho_modelo):
-                    logging.info(f"Modelo já existe e está válido: {caminho_modelo}")
+                    logging.info(
+                        f"Modelo já existe e está válido: {caminho_modelo}")
                     return caminho_modelo
                 else:
                     os.remove(caminho_modelo)
-                    logging.info(f"Modelo corrompido removido: {caminho_modelo}")
+                    logging.info(
+                        f"Modelo corrompido removido: {caminho_modelo}")
             except Exception as e:
                 logging.error(f"Erro ao verificar modelo existente: {e}")
                 os.remove(caminho_modelo)
@@ -340,7 +356,8 @@ class ModelDownloader:
 
                 # Verifica se o download foi bem-sucedido
                 if self.verify_download(caminho_modelo, total_size):
-                    logging.info(f"Download do modelo concluído com sucesso: {caminho_modelo}")
+                    logging.info(
+                        f"Download do modelo concluído com sucesso: {caminho_modelo}")
                     return caminho_modelo
                 else:
                     raise Exception(
@@ -613,7 +630,7 @@ class TranscriptionWindow:
 
             if status not in ['Finalizado', 'Cancelado', 'Erro']:
                 self.current_item = item  # Rastreia o item atual
-                self.file_list.set(item, 'Status', 'Em processamento...')
+                self.file_list.set(item, 'Status', 'Transcrição em progresso...')
                 try:
                     filepath = values[0]
                     result_path = self.main_gui.transcription_manager.transcribe_file(
@@ -623,12 +640,11 @@ class TranscriptionWindow:
                     )
                     self.file_list.set(item, 'Status', 'Finalizado')
                     self.file_list.set(item, 'Transcrito', result_path)
+                except TranscriptionCancelledException:
+                    self.file_list.set(item, 'Status', 'Cancelado')
                 except Exception as e:
-                    if str(e) == "Transcrição cancelada pelo usuário":
-                        self.file_list.set(item, 'Status', 'Cancelado')
-                    else:
-                        logging.error(f"Erro ao transcrever arquivo: {str(e)}")
-                        self.file_list.set(item, 'Status', 'Erro')
+                    logging.error(f"Erro ao transcrever arquivo: {str(e)}")
+                    self.file_list.set(item, 'Status', 'Erro')
                 finally:
                     self.current_item = None  # Reseta o item atual
 
@@ -669,9 +685,10 @@ class TranscriptionWindow:
                                    "Deseja realmente cancelar a transcrição em andamento?"):
                 self.main_gui.transcription_manager.cancel_transcription = True
                 # Termina o processo de transcrição se estiver em execução
-                if self.main_gui.transcription_manager.transcription_process and self.main_gui.transcription_manager.transcription_process.is_alive():
-                    self.main_gui.transcription_manager.transcription_process.terminate()
-                    self.main_gui.transcription_manager.transcription_process.join()
+                transcription_process = self.main_gui.transcription_manager.transcription_process
+                if transcription_process is not None and transcription_process.is_alive():
+                    transcription_process.terminate()
+                    transcription_process.join()
                     self.main_gui.transcription_manager.transcription_process = None
                 # Atualiza o status do arquivo atual
                 if self.current_item:
