@@ -21,9 +21,41 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
-class TranscriptionCancelledException(Exception):
-    """Exceção personalizada para indicar cancelamento da transcrição."""
-    pass
+class ErrorHandlers:
+    """Classe para gerenciar exceções e erros"""
+
+    class TranscriptionCancelledException(Exception):
+        """Exceção para indicar cancelamento da transcrição."""
+        pass
+
+    @staticmethod
+    def handle_exception(e):
+        logging.error(f"Erro: {str(e)}")
+
+    @staticmethod
+    def handle_file_not_found(e):
+        logging.error(f"Arquivo não encontrado: {str(e)}")
+        messagebox.showerror("Erro", f"Arquivo não encontrado: {str(e)}")
+
+    @staticmethod
+    def handle_subprocess_error(e):
+        logging.error(f"Erro no subprocesso: {str(e)}")
+        messagebox.showerror("Erro", f"Ocorreu um erro ao processar o arquivo: {str(e)}")
+
+    @staticmethod
+    def handle_generic_error(e):
+        logging.error(f"Erro inesperado: {str(e)}")
+        messagebox.showerror("Erro", f"Ocorreu um erro inesperado: {str(e)}")
+
+    @staticmethod
+    def handle_model_load_error(e):
+        logging.error(f"Erro ao carregar o modelo: {str(e)}")
+        messagebox.showerror("Erro", f"Erro ao carregar o modelo: {str(e)}")
+
+    @staticmethod
+    def handle_download_error(e):
+        logging.error(f"Erro no download: {str(e)}")
+        messagebox.showerror("Erro", f"Ocorreu um erro durante o download: {str(e)}")
 
 
 class Config:
@@ -55,9 +87,8 @@ class Config:
         try:
             with open(self.CONFIG_FILE, 'r') as f:
                 return json.load(f)
-        except FileNotFoundError:
-            logging.error(
-                f"Arquivo de configuração não encontrado: {self.CONFIG_FILE}")
+        except FileNotFoundError as e:
+            ErrorHandlers.handle_exception(e)
             return self.DEFAULT_CONFIG.copy()
 
     def save_config(self):
@@ -92,30 +123,41 @@ class AudioProcessor:
         self.FFMPEG_PATH = self.config.resource_path(self.FFMPEG_EXECUTABLE)
 
     def extract_audio(self, filepath, temp_dir):
-        if not os.path.exists(self.FFMPEG_PATH):
-            raise FileNotFoundError(
-                f"Executável do FFmpeg não encontrado em: {self.FFMPEG_PATH}")
+        try:
+            if not os.path.exists(self.FFMPEG_PATH):
+                raise FileNotFoundError(
+                    f"Executável do FFmpeg não encontrado em: {self.FFMPEG_PATH}")
 
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir)
-        else:
-            self.clean_temp_dir(temp_dir)
+            if not os.path.exists(temp_dir):
+                os.makedirs(temp_dir)
+            else:
+                self.clean_temp_dir(temp_dir)
 
-        if filepath.lower().endswith(('.mp3', '.wav', '.aac', '.flac', '.m4a', '.ogg')):
-            return filepath
+            if filepath.lower().endswith(('.mp3', '.wav', '.aac', '.flac', '.m4a', '.ogg')):
+                return filepath
 
-        output_path = os.path.join(temp_dir, "temp_audio.aac")
-        output_path = os.path.abspath(output_path)
+            output_path = os.path.join(temp_dir, "temp_audio.aac")
+            output_path = os.path.abspath(output_path)
 
-        command = [self.FFMPEG_PATH, '-i', filepath,
-                   '-acodec', 'aac', output_path, '-y']
-        result = subprocess.run(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            command = [self.FFMPEG_PATH, '-i', filepath,
+                       '-acodec', 'aac', output_path, '-y']
+            result = subprocess.run(
+                command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        if result.returncode != 0:
-            raise subprocess.CalledProcessError(result.returncode, command)
+            if result.returncode != 0:
+                raise subprocess.CalledProcessError(result.returncode, command)
 
-        return output_path
+            return output_path
+
+        except FileNotFoundError as e:
+            ErrorHandlers.handle_file_not_found(e)
+            raise
+        except subprocess.CalledProcessError as e:
+            ErrorHandlers.handle_subprocess_error(e)
+            raise
+        except Exception as e:
+            ErrorHandlers.handle_generic_error(e)
+            raise
 
     def clean_temp_dir(self, temp_dir):
         for filename in os.listdir(temp_dir):
@@ -126,7 +168,7 @@ class AudioProcessor:
                 elif os.path.isdir(file_path):
                     shutil.rmtree(file_path)
             except Exception as e:
-                logging.error(f'Falha ao deletar {file_path}. Motivo: {e}')
+                ErrorHandlers.handle_exception(e)
 
 
 class TranscriptionManager:
@@ -139,10 +181,9 @@ class TranscriptionManager:
         self.stop_event = Event()
         self.is_transcribing = False
         self.cancel_transcription = False
-        self.transcription_process = None  # Para rastrear o processo
+        self.transcription_process = None
 
     def load_model(self, model_path):
-        """Carrega o modelo com verificações de integridade"""
         try:
             if not self.verify_model_file(model_path):
                 raise Exception("Arquivo do modelo inválido ou corrompido")
@@ -152,50 +193,42 @@ class TranscriptionManager:
             self.model = whisper.load_model(model_path, device=device)
             logging.info("Modelo carregado com sucesso")
         except Exception as e:
-            logging.error(f"Erro ao carregar modelo: {e}")
+            ErrorHandlers.handle_model_load_error(e)
             raise
 
     def verify_model_file(self, model_path):
-        """Verifica se o modelo existe e está íntegro"""
         try:
             if not os.path.exists(model_path):
-                logging.error(
-                    f"Arquivo do modelo não encontrado: {model_path}")
+                logging.error(f"Arquivo do modelo não encontrado: {model_path}")
                 return False
 
-            # Verifica o tamanho do arquivo
             file_size = os.path.getsize(model_path)
-            if file_size < 1000000:  # Menos de 1MB provavelmente está corrompido
+            if file_size < 1000000:
                 logging.error(
                     f"Arquivo do modelo parece estar incompleto: {file_size} bytes")
                 return False
 
-            # Tenta carregar o modelo para verificar integridade
             device = "cuda" if torch.cuda.is_available() else "cpu"
             whisper.load_model(model_path, device=device)
             logging.info(f"Modelo verificado com sucesso: {model_path}")
             return True
         except Exception as e:
-            logging.error(f"Erro ao verificar modelo {model_path}: {e}")
-            # Remove o arquivo corrompido
+            ErrorHandlers.handle_exception(e)
             try:
                 os.remove(model_path)
                 logging.info(
                     f"Arquivo de modelo corrompido removido: {model_path}")
             except Exception as del_e:
-                logging.error(f"Erro ao remover arquivo corrompido: {del_e}")
+                ErrorHandlers.handle_exception(del_e)
             return False
 
     def transcribe_file(self, filepath, output_callback=None):
         try:
-            # Verifica se o caminho do modelo está definido
             model_path = self.config.config['model_path']
             if not model_path:
                 raise Exception("Caminho do modelo não definido")
 
-            # Cria uma fila para receber o resultado ou erro
             result_queue = Queue()
-            # Inicia a transcrição em um novo processo
             self.transcription_process = Process(
                 target=self.transcribe_file_process,
                 args=(
@@ -208,7 +241,6 @@ class TranscriptionManager:
             )
             self.transcription_process.start()
 
-            # Aguarda o processo terminar
             while self.transcription_process is not None and self.transcription_process.is_alive():
                 time.sleep(0.5)
                 if self.cancel_transcription:
@@ -216,11 +248,10 @@ class TranscriptionManager:
                         self.transcription_process.terminate()
                         self.transcription_process.join()
                         self.transcription_process = None
-                    self.cancel_transcription = False  # Reseta a flag após o cancelamento
-                    raise TranscriptionCancelledException(
+                    self.cancel_transcription = False
+                    raise ErrorHandlers.TranscriptionCancelledException(
                         "Transcrição cancelada pelo usuário")
 
-            # Obtém o resultado da fila
             if not result_queue.empty():
                 result = result_queue.get()
                 if 'error' in result:
@@ -234,29 +265,26 @@ class TranscriptionManager:
                 raise Exception(
                     "Processo de transcrição não retornou nenhum resultado.")
 
-        except TranscriptionCancelledException:
+        except ErrorHandlers.TranscriptionCancelledException:
             raise
         except Exception as e:
-            logging.error(f"Erro na transcrição: {str(e)}")
+            ErrorHandlers.handle_generic_error(e)
             raise
         finally:
-            # Limpeza
             if self.transcription_process is not None:
                 if self.transcription_process.is_alive():
                     self.transcription_process.join()
                 self.transcription_process = None
-            self.cancel_transcription = False  # Reseta a flag
+            self.cancel_transcription = False
 
     @staticmethod
     def transcribe_file_process(model_path, config_dict, filepath, temp_dir, result_queue):
         try:
-            # Carrega o modelo no novo processo
             device = "cuda" if torch.cuda.is_available() else "cpu"
             model = whisper.load_model(model_path, device=device)
 
-            # Cria um AudioProcessor
             config = Config()
-            config.config = config_dict  # Usa a configuração passada
+            config.config = config_dict
             audio_processor = AudioProcessor(config)
 
             audio_path = audio_processor.extract_audio(
@@ -295,7 +323,6 @@ class ModelDownloader:
         self.config = config
 
     def verify_download(self, file_path, expected_size=None):
-        """Verifica se o download foi concluído corretamente"""
         try:
             if not os.path.exists(file_path):
                 return False
@@ -303,7 +330,6 @@ class ModelDownloader:
             if expected_size and os.path.getsize(file_path) != expected_size:
                 return False
 
-            # Tenta carregar o modelo para verificar integridade
             device = "cuda" if torch.cuda.is_available() else "cpu"
             whisper.load_model(file_path, device=device)
             return True
@@ -311,7 +337,6 @@ class ModelDownloader:
             return False
 
     def download_model(self, model_name, progress_callback=None, cancel_event=None):
-        """Download do modelo com verificações e recuperação"""
         url = self.MODELS_URLS[model_name]
         diretorio_modelo = self.config.resource_path(".model")
         if not os.path.exists(diretorio_modelo):
@@ -319,7 +344,6 @@ class ModelDownloader:
 
         caminho_modelo = os.path.join(diretorio_modelo, f"{model_name}.pt")
 
-        # Remove arquivo existente se estiver corrompido
         if os.path.exists(caminho_modelo):
             try:
                 if self.verify_download(caminho_modelo):
@@ -331,10 +355,9 @@ class ModelDownloader:
                     logging.info(
                         f"Modelo corrompido removido: {caminho_modelo}")
             except Exception as e:
-                logging.error(f"Erro ao verificar modelo existente: {e}")
+                ErrorHandlers.handle_exception(e)
                 os.remove(caminho_modelo)
 
-        # Tenta o download até 3 vezes
         max_tentativas = 3
         for tentativa in range(max_tentativas):
             try:
@@ -354,7 +377,6 @@ class ModelDownloader:
                             progress = (downloaded / total_size) * 100
                             progress_callback(progress)
 
-                # Verifica se o download foi bem-sucedido
                 if self.verify_download(caminho_modelo, total_size):
                     logging.info(
                         f"Download do modelo concluído com sucesso: {caminho_modelo}")
@@ -363,13 +385,20 @@ class ModelDownloader:
                     raise Exception(
                         "Arquivo baixado está corrompido ou incompleto")
 
+            except requests.RequestException as e:
+                ErrorHandlers.handle_download_error(e)
+                if os.path.exists(caminho_modelo):
+                    os.remove(caminho_modelo)
+                if tentativa == max_tentativas - 1:
+                    raise Exception(
+                        f"Falha após {max_tentativas} tentativas de download")
+                continue
             except Exception as e:
-                logging.error(
-                    f"Erro no download do modelo (tentativa {tentativa + 1}): {e}")
+                ErrorHandlers.handle_download_error(e)
                 if os.path.exists(caminho_modelo):
                     os.remove(caminho_modelo)
                 if str(e) == "Download cancelado pelo usuário":
-                    raise e  # Repassa a exceção para o chamador
+                    raise e
                 if tentativa == max_tentativas - 1:
                     raise Exception(
                         f"Falha após {max_tentativas} tentativas de download")
@@ -407,7 +436,6 @@ class GUI:
         style = ttk.Style()
         style.theme_use('clam')
 
-        # Definição de cores
         self.colors = {
             'background': "#343a40",
             'foreground': "#f8f9fa",
@@ -415,7 +443,6 @@ class GUI:
             'model': "#28a745"
         }
 
-        # Configuração dos estilos
         style.configure("TFrame", background=self.colors['background'])
         style.configure("TButton",
                         background=self.colors['accent'],
@@ -439,7 +466,6 @@ class GUI:
                         font=("Arial", 16, "bold"))
 
     def create_widgets(self):
-        # Frame do título
         title_frame = ttk.Frame(self.root, style="TFrame", height=70)
         title_frame.pack(side=tk.TOP, fill=tk.X)
         title_frame.pack_propagate(False)
@@ -448,11 +474,9 @@ class GUI:
                            style="Title.TLabel", anchor="center")
         titulo.pack(side=tk.TOP, fill=tk.X, pady=20)
 
-        # Frame principal
         self.main_frame = ttk.Frame(self.root, style="TFrame")
         self.main_frame.pack(expand=True, fill=tk.BOTH, padx=20, pady=20)
 
-        # Label de instrução
         self.instruction_text = tk.StringVar(
             value="Selecione os arquivos de áudio ou vídeo para transcrever.")
         instruction_label = ttk.Label(self.main_frame,
@@ -461,7 +485,6 @@ class GUI:
                                       style="TLabel")
         instruction_label.pack()
 
-        # Botões
         self.btn_select = ttk.Button(self.main_frame,
                                      text="Selecionar Arquivos",
                                      command=self.show_file_selection_window,
@@ -497,7 +520,6 @@ class GUI:
         self.root.mainloop()
 
     def check_initial_model(self):
-        """Verificação melhorada do modelo inicial"""
         model_path = self.config.config.get('model_path')
         if model_path:
             try:
@@ -514,7 +536,7 @@ class GUI:
                 self.transcription_manager.load_model(model_path)
                 logging.info("Modelo inicial carregado com sucesso")
             except Exception as e:
-                logging.error(f"Erro ao carregar modelo inicial: {e}")
+                ErrorHandlers.handle_exception(e)
                 self.show_quality_selection_window()
         else:
             logging.info("Nenhum modelo configurado")
@@ -529,7 +551,7 @@ class TranscriptionWindow:
         self.window = tk.Toplevel(main_gui.root)
         self.setup_window()
         self.create_widgets()
-        self.current_item = None  # Para rastrear o item atual
+        self.current_item = None
 
     def setup_window(self):
         self.window.title("Seleção de Arquivos")
@@ -539,21 +561,17 @@ class TranscriptionWindow:
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def create_widgets(self):
-        # Botão Adicionar
         self.btn_add = ttk.Button(self.window,
                                   text="Adicionar Arquivo",
                                   command=self.add_files,
                                   style="Selecao.TButton")
         self.btn_add.pack(pady=10)
 
-        # Lista de arquivos
         self.create_file_list()
 
-        # Frame de botões
         self.buttons_frame = ttk.Frame(self.window, style="Selecao.TFrame")
         self.buttons_frame.pack(pady=10)
 
-        # Botões de controle
         self.btn_start = ttk.Button(self.buttons_frame,
                                     text="Iniciar Transcrição",
                                     command=self.start_transcription,
@@ -612,7 +630,7 @@ class TranscriptionWindow:
         self.btn_start.config(state=tk.DISABLED)
         self.btn_add.config(state=tk.DISABLED)
         self.main_gui.transcription_manager.cancel_transcription = False
-        self.main_gui.transcription_manager.is_transcribing = True  # Inicia o estado de transcrição
+        self.main_gui.transcription_manager.is_transcribing = True
 
         thread = Thread(target=self.process_files)
         thread.daemon = True
@@ -629,8 +647,9 @@ class TranscriptionWindow:
             status = values[1]
 
             if status not in ['Finalizado', 'Cancelado', 'Erro']:
-                self.current_item = item  # Rastreia o item atual
-                self.file_list.set(item, 'Status', 'Transcrição em progresso...')
+                self.current_item = item
+                self.file_list.set(
+                    item, 'Status', 'Transcrição em progresso...')
                 try:
                     filepath = values[0]
                     result_path = self.main_gui.transcription_manager.transcribe_file(
@@ -640,15 +659,15 @@ class TranscriptionWindow:
                     )
                     self.file_list.set(item, 'Status', 'Finalizado')
                     self.file_list.set(item, 'Transcrito', result_path)
-                except TranscriptionCancelledException:
+                except ErrorHandlers.TranscriptionCancelledException:
                     self.file_list.set(item, 'Status', 'Cancelado')
                 except Exception as e:
-                    logging.error(f"Erro ao transcrever arquivo: {str(e)}")
+                    ErrorHandlers.handle_exception(e)
                     self.file_list.set(item, 'Status', 'Erro')
                 finally:
-                    self.current_item = None  # Reseta o item atual
+                    self.current_item = None
 
-        self.main_gui.transcription_manager.is_transcribing = False  # Finaliza o estado de transcrição
+        self.main_gui.transcription_manager.is_transcribing = False
 
         self.btn_start.config(state=tk.NORMAL)
         self.btn_add.config(state=tk.NORMAL)
@@ -659,7 +678,7 @@ class TranscriptionWindow:
         else:
             messagebox.showinfo(
                 "Cancelado", "A transcrição foi cancelada pelo usuário.")
-            self.main_gui.transcription_manager.cancel_transcription = False  # Reseta a flag
+            self.main_gui.transcription_manager.cancel_transcription = False
 
     def update_transcription_result(self, item, path):
         self.file_list.set(item, 'Transcrito', path)
@@ -684,23 +703,21 @@ class TranscriptionWindow:
             if messagebox.askyesno("Confirmar",
                                    "Deseja realmente cancelar a transcrição em andamento?"):
                 self.main_gui.transcription_manager.cancel_transcription = True
-                # Termina o processo de transcrição se estiver em execução
                 transcription_process = self.main_gui.transcription_manager.transcription_process
                 if transcription_process is not None and transcription_process.is_alive():
                     transcription_process.terminate()
                     transcription_process.join()
                     self.main_gui.transcription_manager.transcription_process = None
-                # Atualiza o status do arquivo atual
                 if self.current_item:
-                    self.file_list.set(self.current_item, 'Status', 'Cancelado')
-                self.main_gui.transcription_manager.is_transcribing = False  # Reseta a flag
+                    self.file_list.set(self.current_item,
+                                       'Status', 'Cancelado')
+                self.main_gui.transcription_manager.is_transcribing = False
             else:
-                pass  # Não faz nada, mantém a janela aberta
+                pass
         else:
             self.window.destroy()
 
     def winfo_exists(self):
-        """Verifica se a janela ainda existe"""
         return self.window.winfo_exists()
 
 
@@ -712,7 +729,7 @@ class QualitySelectionWindow:
         self.window = tk.Toplevel(main_gui.root)
         self.setup_window()
         self.create_widgets()
-        self.cancel_download = Event()  # Evento para controlar o cancelamento do download
+        self.cancel_download = Event()
 
     def setup_window(self):
         self.window.title("Selecionar Qualidade")
@@ -722,7 +739,6 @@ class QualitySelectionWindow:
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def winfo_exists(self):
-        """Método para verificar se a janela ainda existe"""
         return self.window.winfo_exists()
 
     def create_widgets(self):
@@ -749,11 +765,9 @@ class QualitySelectionWindow:
         self.btn_download.pack(pady=10)
 
     def lift(self):
-        """Método para trazer a janela para frente"""
         self.window.lift()
 
     def download_model(self):
-        # Desabilita o botão durante o download
         self.btn_download.config(state=tk.DISABLED)
         model_name = self.quality_var.get()
 
@@ -777,7 +791,6 @@ class QualitySelectionWindow:
         )
         progress_label.pack(pady=5)
 
-        # Botão "Cancelar Download"
         btn_cancel_download = ttk.Button(
             progress_window,
             text="Cancelar Download",
@@ -785,15 +798,12 @@ class QualitySelectionWindow:
         )
         btn_cancel_download.pack(pady=10)
 
-        # Evento para fechar a janela de progresso
         progress_window.protocol(
             "WM_DELETE_WINDOW", lambda: self.cancel_download_process(progress_window))
 
-        # Reinicia o evento de cancelamento
         self.cancel_download.clear()
 
         def update_progress(progress):
-            # Agendar a atualização na thread principal
             self.window.after(0, lambda: self._update_progress_ui(
                 progress, progress_var, progress_label, progress_window))
 
@@ -802,10 +812,9 @@ class QualitySelectionWindow:
                 model_path = self.main_gui.model_downloader.download_model(
                     model_name,
                     progress_callback=update_progress,
-                    cancel_event=self.cancel_download  # Passa o evento de cancelamento
+                    cancel_event=self.cancel_download
                 )
 
-                # Verifica novamente o modelo após o download
                 if self.main_gui.transcription_manager.verify_model_file(model_path):
                     self.main_gui.config.config['model_path'] = model_path
                     self.main_gui.config.save_config()
@@ -827,12 +836,10 @@ class QualitySelectionWindow:
                 else:
                     self.window.after(0, lambda e=e: messagebox.showerror(
                         "Erro", f"Erro ao baixar modelo: {str(e)}"))
-                logging.error(f"Erro no download do modelo: {e}")
+                ErrorHandlers.handle_exception(e)
             finally:
-                # Reabilita o botão de download, se a janela ainda existir
                 self.window.after(0, self.reenable_download_button)
 
-        # Iniciar o download em uma nova thread
         thread = Thread(target=download_thread)
         thread.start()
 
@@ -846,21 +853,17 @@ class QualitySelectionWindow:
 
     def cancel_download_process(self, progress_window):
         if messagebox.askyesno("Confirmar", "Deseja mesmo cancelar o download?"):
-            self.cancel_download.set()  # Sinaliza o cancelamento
-            # Fecha a janela de progresso
+            self.cancel_download.set()
             if progress_window.winfo_exists():
                 progress_window.destroy()
-            # Reabilita o botão de download, se a janela ainda existir
             if self.window.winfo_exists():
                 self.btn_download.config(state=tk.NORMAL)
 
     def reenable_download_button(self):
-        """Reabilita o botão de download, se o botão ainda existir"""
         if self.window.winfo_exists() and self.btn_download.winfo_exists():
             self.btn_download.config(state=tk.NORMAL)
 
     def on_closing(self):
-        """Função para lidar com o fechamento da janela principal"""
         if messagebox.askyesno("Confirmar", "Deseja mesmo cancelar o download?"):
             self.cancel_download.set()
             if self.window.winfo_exists():
