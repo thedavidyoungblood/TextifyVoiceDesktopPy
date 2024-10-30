@@ -51,51 +51,29 @@ Também existe uma maneira de instalar manualmente [LINK](https://www.wikihow.co
 
 ### Executável Pré-compilado
 
-1. **Download**: Baixe a versão mais recente [aqui](https://github.com/finnzao/WhisperDesktopPy/releases/tag/v1).
+1. **Download**: Baixe a versão mais recente [aqui](https://github.com/finnzao/TextifyVoiceDesktopPy/releases/tag/v1).
 2. **Instalação**: Extraia o arquivo baixado.
 3. **Execução**: Execute o arquivo `TextifyVoice.exe`.
 4. **Configuração**: Na primeira execução, configure as preferências conforme suas necessidades.
 5. **Uso**: Comece a transcrever seus arquivos!
 
-### A Partir do Git
 
-1. **Clone o Repositório**:
-    
-    ```bash
-    git clone <https://github.com/finnzao/WhisperDesktopPy.git>
-    
-    ```
-    
-2. **Instale as Dependências**:
-    
-    ```bash
-    pip install -r requirements.txt
-    
-    ```
-    
-3. **Execute o Aplicativo**:
-    
-    ```bash
-    python main.py
-    
-    ```
-    
 
 ## 🛠️ Desenvolvimento
 
 ### Configuração
 
-1. **Clone o Repositório com Submódulos**:
+1. **Clone o Repositório**:
     
     ```bash
-    git clone --recurse-submodules <https://github.com/seu-usuario/textify-voice.git>
+    git clone <https://github.com/finnzao/TextifyVoiceDesktopPy.git>
     
     ```
     
 2. **Entre no Diretório do Projeto**:
     
     ```bash
-    cd textify-voice
+    cd TextifyVoiceDesktopPy
     
     ```
     
