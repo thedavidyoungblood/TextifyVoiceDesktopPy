@@ -1,249 +1,150 @@
-# TextifyVoice
+# TextifyVoice - Transcrição de Áudio e Vídeo com Whisper
 
-TextifyVoice é uma aplicação desenvolvida em Python que permite transcrever arquivos de áudio e vídeo em texto, utilizando o modelo Whisper da OpenAI. A aplicação possui uma interface gráfica construída com Tkinter, facilitando a interação do usuário.
+**TextifyVoice** é uma aplicação prática que combina o modelo Whisper ASR da OpenAI com uma interface gráfica simples e intuitiva. Ela serve como uma ferramenta versátil para transcrição de áudio e vídeo, permitindo ao usuário converter facilmente linguagem falada em texto escrito.
 
-## Índice
+Inicialmente, eu utilizava a biblioteca Whisper localmente no meu computador, manipulando os arquivos apenas por meio do prompt de comando. No entanto, conforme as solicitações para uso do Whisper em transcrições de vídeos se tornaram frequentes, percebi que essa necessidade era compartilhada por outras pessoas. Assim, surgiu a ideia de criar uma maneira mais acessível para aqueles que não têm contato frequente com tecnologia – especialmente para quem se sente intimidado ao utilizar o prompt de comando. A solução foi desenvolver uma aplicação desktop, com duas principais vantagens: ser gratuita e possibilitar transcrições sem a necessidade de conexão com a internet.
 
-- [Descrição Geral](#descrição-geral)
-- [Funcionalidades](#funcionalidades)
-- [Arquitetura do Código](#arquitetura-do-código)
-- [Instalação](#instalação)
-- [Uso](#uso)
-- [Dependências](#dependências)
-- [Logs](#logs)
-- [Erros Comuns](#erros-comuns)
-- [Contribuição](#contribuição)
-- [Licença](#licença)
-- [Autor](#autor)
+## 🚀 Funcionalidades
 
-## Descrição Geral
+- **Transcrição de Áudio e Vídeo**: Converta arquivos de áudio ou vídeo em texto com facilidade.
+- **Interface Gráfica Intuitiva**: Selecione e transcreva arquivos através de uma interface amigável.
+- **Suporte a Múltiplos Formatos**: Compatível com formatos como MP3, MP4, WAV, AAC, FLAC, M4A, OGG, entre outros.
+- **Download de Modelos Personalizável**: Escolha entre diferentes modelos de transcrição com base em suas necessidades.
+- **Processamento de Áudio Otimizado**: Utiliza FFmpeg para extrair trilhas sonoras de arquivos de vídeo.
+- **Salvamento Automático**: As transcrições são salvas em arquivos `.docx` no mesmo diretório dos arquivos originais.
+- **Cancelamento de Processos**: Possibilidade de cancelar downloads de modelos e transcrições em andamento.
 
-A aplicação tem como objetivo facilitar o processo de transcrição de arquivos de áudio e vídeo, suportando diversos formatos e utilizando modelos de transcrição de alta qualidade. O usuário pode selecionar arquivos, escolher o modelo de transcrição e acompanhar o progresso da transcrição em tempo real.
+## 📜 Requisitos
 
-## Funcionalidades
+### Sistemas Operacionais Compatíveis:
 
-- **Suporte a Múltiplos Formatos**: MP4, MP3, WAV, MKV, AAC, FLAC, M4A, OGG.
-- **Interface Gráfica Intuitiva**: Desenvolvida com Tkinter.
-- **Seleção de Modelo Whisper**: Possibilidade de selecionar entre diferentes modelos e qualidades.
-- **Download Automático de Modelos**: Baixa modelos necessários caso não estejam disponíveis localmente.
-- **Suporte a GPU**: Utiliza aceleração por GPU se disponível.
-- **Gerenciamento de Transcrições**: Permite adicionar múltiplos arquivos à fila de transcrição.
-- **Cancelamento de Transcrição**: Possibilidade de cancelar transcrições em andamento.
+| Sistema Operacional | Executável Pré-compilado | Como Módulo Python | A Partir do Git |
+| --- | --- | --- | --- |
+| **Windows** | ✔️ | ✔️ | ✔️ |
+| **macOS** | ❌ | ✔️ | ✔️ |
+| **Linux** | ❌ | ✔️ | ✔️ |
+- **Python 3.8 ou superior** (Recomendado Python 3.11) para instalação como módulo.
+- **FFmpeg**: Necessário para processar arquivos de vídeo. Certifique-se de que o FFmpeg está instalado e configurado no PATH do sistema.
+- **Conexão com a Internet**: Necessária apenas para download dos modelos e atualizações.
 
-## Arquitetura do Código
+### Requisitos de Hardware por Modelo:
 
-### Estrutura Geral
+| Modelo | Tempo de Transcrição* | Precisão | VRAM Requerida | Velocidade Relativa |
+| --- | --- | --- | --- | --- |
+| **Tiny** | 3 min | Baixa | ~1 GB | ~32x |
+| **Base** | 3 min | Média | ~1 GB | ~16x |
+| **Small** | 15 min | Alta | ~2 GB | ~6x |
+| **Medium** | 25 min | Muito Alta | ~5 GB | ~2x |
+| **Large-V1** | 1h 13min | Muito Alta | ~10 GB | 1x |
+| **Large-V2** | 1h 7min | Muito Alta | ~10 GB | 1x |
+| **Large-V3** | 1h 10min | Muito Alta | ~10 GB | 1x |
 
-- **Módulos e Bibliotecas**:
-  - `tkinter` e `ttk`: Construção da interface gráfica.
-  - `whisper`: Modelo de transcrição de áudio para texto.
-  - `torch`: Verificação de disponibilidade de GPU.
-  - `docx`: Criação e manipulação de documentos `.docx`.
-  - `subprocess`: Execução de comandos do sistema, como o FFmpeg.
-  - `threading`: Gerenciamento de threads para operações assíncronas.
-  - `logging`: Registro e gerenciamento de logs.
-  - `json`: Leitura e escrita de arquivos de configuração.
-  - `requests`: Download de modelos pela internet.
+\*Tempo estimado para transcrever 1 hora de áudio. Pode variar dependendo do hardware.
 
-### Organização do Código
+## 🔧 Instalação
 
-- **Funções Utilitárias**:
-  - `resource_path(relative_path)`: Gerencia caminhos de recursos, especialmente quando a aplicação é empacotada com ferramentas como PyInstaller.
-  - `configurar_logger()`: Configura o sistema de logging, incluindo o formato e a rotação de arquivos de log.
+**FFmpeg** 
 
-- **Classes Personalizadas**:
-  - `NoConsolePopen`: Subclasse de `subprocess.Popen` que impede a abertura de janelas de console no Windows durante a execução de comandos do FFmpeg.
+Existem dois arquivos para instalação, `install_ffmpeg_profile.ps1` (instalação a nível de usuário atual) e `install_ffmpeg_adm.ps1` (instalação a nível de administrador). Esses scripts em PowerShell foram criados para facilitar o processo de instalação do FFmpeg, um programa essencial para a conversão de arquivos durante o uso da aplicação.
 
-- **Funções Principais**:
-  - `extrair_audio(filepath, temp_dir)`: Extrai o áudio de um arquivo de vídeo utilizando o FFmpeg.
-  - `extrair_e_transcrever_arquivo(filepath, item, lista_arquivos)`: Gerencia o processo completo de extração de áudio e transcrição de um arquivo específico.
-  - `transcrever_arquivos_em_fila(lista_arquivos, btn_iniciar, btn_adicionar)`: Processa todos os arquivos na fila de transcrição.
-  - `iniciar_transcricao(lista_arquivos, btn_iniciar, btn_adicionar)`: Inicia o processo de transcrição em uma thread separada.
-  - `adicionar_arquivo(lista_arquivos)`: Abre um diálogo para o usuário selecionar arquivos a serem adicionados à lista.
-  - `abrir_local_do_arquivo(event, lista_arquivos)`: Abre o diretório onde o arquivo transcrito foi salvo.
-  - `selecionar_modelo()`: Permite ao usuário selecionar manualmente um modelo Whisper existente.
-  - `verificar_modelo_inicial()`: Verifica se um modelo padrão está configurado e carrega-o.
-  - `selecionar_qualidade()`: Interface para seleção e download de modelos Whisper de diferentes qualidades.
+Também existe uma maneira de instalar manualmente [LINK](https://www.wikihow.com/Install-FFmpeg-on-Windows).
 
-### Gerenciamento de Estados e Eventos
+### Executável Pré-compilado
 
-- **Variáveis Globais**:
-  - `cancelar_desgravacao`: Controla o cancelamento das transcrições.
-  - `transcricao_em_andamento`: Indica se uma transcrição está em progresso.
-  - `threads`: Lista de threads ativas para gerenciamento.
+1. **Download**: Baixe a versão mais recente [aqui](https://github.com/finnzao/WhisperDesktopPy/releases/tag/v1).
+2. **Instalação**: Extraia o arquivo baixado.
+3. **Execução**: Execute o arquivo `TextifyVoice.exe`.
+4. **Configuração**: Na primeira execução, configure as preferências conforme suas necessidades.
+5. **Uso**: Comece a transcrever seus arquivos!
 
-- **Eventos**:
-  - `Event()`: Utilizado para sinalizar o encerramento de threads e operações.
-
-### Interface Gráfica
-
-- **Janela Principal**:
-  - Contém botões para selecionar arquivos e escolher a qualidade do modelo.
-  - Exibe o caminho do modelo atual selecionado.
-
-- **Janela de Seleção de Arquivos**:
-  - Permite adicionar arquivos à fila de transcrição.
-  - Mostra uma lista dos arquivos com seus respectivos status.
-  - Possibilita iniciar ou cancelar a transcrição.
-
-- **Janela de Seleção de Qualidade**:
-  - Oferece opções de modelos Whisper para download.
-  - Mostra o progresso do download do modelo selecionado.
-
-### Fluxo de Execução
-
-1. **Inicialização**:
-   - Configura o logger e carrega as configurações iniciais.
-   - Verifica se um modelo padrão está configurado e disponível.
-
-2. **Interação do Usuário**:
-   - O usuário seleciona arquivos e o modelo de transcrição desejado.
-   - Inicia o processo de transcrição.
-
-3. **Processamento**:
-   - Para cada arquivo, extrai o áudio se necessário.
-   - Transcreve o áudio utilizando o modelo Whisper.
-   - Salva a transcrição em um arquivo `.docx`.
-
-4. **Finalização**:
-   - Atualiza o status de cada arquivo na interface.
-   - Permite ao usuário abrir o local do arquivo transcrito.
-
-## Instalação
-
-### Passos
+### A Partir do Git
 
 1. **Clone o Repositório**:
+    
+    ```bash
+    git clone <https://github.com/finnzao/WhisperDesktopPy.git>
+    
+    ```
+    
+2. **Instale as Dependências**:
+    
+    ```bash
+    pip install -r requirements.txt
+    
+    ```
+    
+3. **Execute o Aplicativo**:
+    
+    ```bash
+    python main.py
+    
+    ```
+    
 
-   ```bash
-   git clone https://github.com/seu_usuario/textifyvoice.git
-   cd textifyvoice
-   ```
+## 🛠️ Desenvolvimento
 
-2. **Crie um Ambiente Virtual (Opcional)**:
+### Configuração
 
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # Linux/Mac
-   venv\Scripts\activate  # Windows
-   ```
+1. **Clone o Repositório com Submódulos**:
+    
+    ```bash
+    git clone --recurse-submodules <https://github.com/seu-usuario/textify-voice.git>
+    
+    ```
+    
+2. **Entre no Diretório do Projeto**:
+    
+    ```bash
+    cd textify-voice
+    
+    ```
+    
+3. **Crie um Ambiente Virtual**:
+    
+    ```bash
+    python -m venv venv
+    
+    ```
+    
+4. **Ative o Ambiente Virtual**:
+    - **Windows**:
+        
+        ```bash
+        venv\\Scripts\\activate
+        
+        ```
+        
+    - **Linux/macOS**:
+        
+        ```bash
+        source venv/bin/activate
+        
+        ```
+        
+5. **Instale as Dependências**:
+    
+    ```bash
+    pip install -r requirements.txt
+    
+    ```
+    
 
-3. **Instale as Dependências**:
+### Executando o Aplicativo
 
-4. **Instale o FFmpeg**:
+Execute o aplicativo usando o seguinte comando:
 
-   - **Windows**:
-     - Clique no executavel `setup.exe` para instalar ffmpeg como uma variavel de perfil.
+```bash
+python main.py
+```
 
+### Compilação
 
-5. **Execute a Aplicação**:
+Para compilar o projeto em um executável utilize **`pyinstaller`**:
 
-   ```bash
-   python textifyvoice.py
-   ```
+```bash
+pyinstaller --windowed --hidden-import=whisper --icon="./bin/icon.ico" --add-data="./bin/ffmpeg.exe;bin" --add-data="config.json;." textifyVoiceModelDownload.py
+```
 
-## Uso
+### Compatibilidade
 
-1. **Inicie a Aplicação**:
-
-   - A interface principal será exibida com opções para selecionar arquivos e ajustar configurações.
-
-2. **Selecione os Arquivos**:
-
-   - Clique em **"Selecionar Arquivos"** para abrir a janela de seleção.
-   - Na janela de seleção, clique em **"Adicionar Arquivo"** e escolha os arquivos desejados.
-   - Os arquivos aparecerão em uma lista com o status **"Preparado"**.
-
-3. **Selecione a Qualidade do Modelo**:
-
-   - Opcionalmente, clique em **"Selecionar Qualidade"** para escolher a qualidade do modelo Whisper.
-   - Se o modelo não estiver disponível localmente, a aplicação oferecerá a opção de download.
-
-4. **Inicie a Transcrição**:
-
-   - Na janela de seleção, clique em **"Iniciar Transcrição"**.
-   - O status de cada arquivo será atualizado conforme o progresso.
-
-5. **Acompanhe o Progresso**:
-
-   - O status dos arquivos mudará para **"Em processamento..."**, **"Finalizado"**, ou **"Erro"**.
-   - Duplo clique em um arquivo com status **"Finalizado"** para abrir o diretório do arquivo transcrito.
-
-6. **Transcrições**:
-
-   - As transcrições são salvas no mesmo diretório dos arquivos originais com o sufixo `_text.docx`.
-
-## Dependências
-
-- **Pacotes Python**:
-
-  - `tkinter`: Interface gráfica.
-  - `whisper`: Modelo de transcrição.
-  - `torch`: Suporte a GPU.
-  - `python-docx`: Manipulação de arquivos `.docx`.
-  - `requests`: Download de modelos.
-  - `ffmpeg-python` (opcional): Integração com FFmpeg.
-
-- **Outras Dependências**:
-
-  - **FFmpeg**: Necessário para extração de áudio.
-  - **CUDA** (Opcional): Para aceleração por GPU.
-
-## Logs
-
-- Os logs são armazenados na pasta `logs/`, com o arquivo principal sendo `info.log`.
-- Utiliza `RotatingFileHandler` para limitar o tamanho dos arquivos de log e manter backups.
-
-## Erros Comuns
-
-- **Modelo Não Encontrado**:
-
-  - Certifique-se de que o modelo Whisper está corretamente configurado.
-  - Utilize a opção **"Selecionar Qualidade"** para baixar e configurar o modelo.
-
-- **FFmpeg Não Encontrado**:
-
-  - Verifique se o FFmpeg está instalado e se o executável está no `PATH` do sistema.
-
-- **Erro ao Carregar o Modelo**:
-
-  - Verifique a compatibilidade do modelo com a versão do Whisper instalada.
-  - Certifique-se de que o arquivo do modelo não está corrompido.
-
-- **Transcrição Não Inicia**:
-
-  - Verifique se todos os arquivos adicionados são suportados.
-  - Consulte os logs para detalhes específicos do erro.
-
-## Contribuição
-
-Contribuições são bem-vindas! Sinta-se à vontade para abrir issues e pull requests para melhorar este projeto.
-
-### Como Contribuir
-
-1. **Fork o Repositório**.
-2. **Crie uma Branch**:
-
-   ```bash
-   git checkout -b feature/nova-funcionalidade
-   ```
-
-3. **Commit suas Alterações**:
-
-   ```bash
-   git commit -m "Adiciona nova funcionalidade"
-   ```
-
-4. **Envie para o Repositório Remoto**:
-
-   ```bash
-   git push origin feature/nova-funcionalidade
-   ```
-
-5. **Abra um Pull Request**.
-
-
-## Autor
-
-Desenvolvido por [Felipe](https://github.com/finnzao).
-
+O projeto é compatível com Windows, Linux e macOS. Caso encontre algum bug ou problema, sinta-se à vontade para criar uma issue.
