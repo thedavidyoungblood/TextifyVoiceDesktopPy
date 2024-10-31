@@ -316,7 +316,6 @@ class ModelDownloader:
         "large-v1": "https://openaipublic.azureedge.net/main/whisper/models/e4b87e7e0bf463eb8e6956e646f1e277e901512310def2c24bf0e11bd3c28e9a/large-v1.pt",
         "large-v2": "https://openaipublic.azureedge.net/main/whisper/models/81f7c96c852ee8fc832187b0132e569d6c3065a3252ed18e56effd0b6a73e524/large-v2.pt",
         "large-v3": "https://openaipublic.azureedge.net/main/whisper/models/e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/large-v3.pt",
-        "large": "https://openaipublic.azureedge.net/main/whisper/models/e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/large-v3.pt"
     }
 
     def __init__(self, config):
@@ -331,7 +330,7 @@ class ModelDownloader:
                 return False
 
             device = "cuda" if torch.cuda.is_available() else "cpu"
-            whisper.load_model(file_path, device=device)
+            torch.load(file_path, map_location=device)
             return True
         except Exception:
             return False
@@ -361,21 +360,31 @@ class ModelDownloader:
         max_tentativas = 3
         for tentativa in range(max_tentativas):
             try:
-                response = requests.get(url, stream=True)
+                session = requests.Session()
+                response = session.get(url, stream=True)
                 response.raise_for_status()
                 total_size = int(response.headers.get('content-length', 0))
-                block_size = 65536
+                block_size = 1048576  # Aumentando o bloco para 1 MB
 
                 with open(caminho_modelo, 'wb') as f:
                     downloaded = 0
+                    start_time = time.time()
                     for data in response.iter_content(block_size):
                         if cancel_event and cancel_event.is_set():
                             raise Exception("Download cancelado pelo usuário")
-                        downloaded += len(data)
                         f.write(data)
-                        if progress_callback:
+                        downloaded += len(data)
+                        if progress_callback and total_size > 0:
                             progress = (downloaded / total_size) * 100
                             progress_callback(progress)
+                        else:
+                            # Se o tamanho total não for conhecido
+                            elapsed_time = time.time() - start_time
+                            speed = downloaded / elapsed_time if elapsed_time > 0 else 0
+                            progress_callback(f"Baixado {downloaded} bytes a {speed:.2f} bytes/s")
+                    else:
+                        progress_callback(100)
+                session.close()
 
                 if self.verify_download(caminho_modelo, total_size):
                     logging.info(
@@ -747,11 +756,21 @@ class QualitySelectionWindow:
                           style="TLabel")
         label.pack(pady=20)
 
-        self.quality_var = tk.StringVar(value="medium")
+        model_path = self.main_gui.config.config.get('model_path', '')
+        default_model_name = "medium"  # Padrão caso não encontre
+
+        if model_path:
+            default_model_name = os.path.splitext(
+                os.path.basename(model_path))[0]
+            # Verificar se o nome está nas opções disponíveis
+            if default_model_name not in self.main_gui.model_downloader.MODELS_URLS:
+                default_model_name = "medium"
+
+        self.quality_var = tk.StringVar(value=default_model_name)
         self.quality_dropdown = ttk.OptionMenu(
             self.window,
             self.quality_var,
-            "medium",
+            self.quality_var.get(),
             *self.main_gui.model_downloader.MODELS_URLS.keys()
         )
         self.quality_dropdown.pack(pady=10)
