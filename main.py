@@ -40,7 +40,8 @@ class ErrorHandlers:
     @staticmethod
     def handle_subprocess_error(e):
         logging.error(f"Erro no subprocesso: {str(e)}")
-        messagebox.showerror("Erro", f"Ocorreu um erro ao processar o arquivo: {str(e)}")
+        messagebox.showerror(
+            "Erro", f"Ocorreu um erro ao processar o arquivo: {str(e)}")
 
     @staticmethod
     def handle_generic_error(e):
@@ -55,7 +56,8 @@ class ErrorHandlers:
     @staticmethod
     def handle_download_error(e):
         logging.error(f"Erro no download: {str(e)}")
-        messagebox.showerror("Erro", f"Ocorreu um erro durante o download: {str(e)}")
+        messagebox.showerror(
+            "Erro", f"Ocorreu um erro durante o download: {str(e)}")
 
 
 class Config:
@@ -199,7 +201,8 @@ class TranscriptionManager:
     def verify_model_file(self, model_path):
         try:
             if not os.path.exists(model_path):
-                logging.error(f"Arquivo do modelo não encontrado: {model_path}")
+                logging.error(
+                    f"Arquivo do modelo não encontrado: {model_path}")
                 return False
 
             file_size = os.path.getsize(model_path)
@@ -328,7 +331,7 @@ class ModelDownloader:
 
             if expected_size and os.path.getsize(file_path) != expected_size:
                 return False
-
+            # GPU ou CPU
             device = "cuda" if torch.cuda.is_available() else "cpu"
             torch.load(file_path, map_location=device)
             return True
@@ -364,7 +367,7 @@ class ModelDownloader:
                 response = session.get(url, stream=True)
                 response.raise_for_status()
                 total_size = int(response.headers.get('content-length', 0))
-                block_size = 1048576  # Aumentando o bloco para 1 MB
+                block_size = 1048576  # 1 MB
 
                 with open(caminho_modelo, 'wb') as f:
                     downloaded = 0
@@ -381,7 +384,8 @@ class ModelDownloader:
                             # Se o tamanho total não for conhecido
                             elapsed_time = time.time() - start_time
                             speed = downloaded / elapsed_time if elapsed_time > 0 else 0
-                            progress_callback(f"Baixado {downloaded} bytes a {speed:.2f} bytes/s")
+                            progress_callback(f"Baixado {downloaded} bytes a {
+                                              speed:.2f} bytes/s")
                     else:
                         progress_callback(100)
                 session.close()
