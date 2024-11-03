@@ -1,128 +1,127 @@
-# TextifyVoice - Transcrição de Áudio e Vídeo com Whisper
+```markdown
 
-**TextifyVoice** é uma aplicação prática que combina o modelo Whisper ASR da OpenAI com uma interface gráfica simples e intuitiva. Ela serve como uma ferramenta versátil para transcrição de áudio e vídeo, permitindo ao usuário converter facilmente linguagem falada em texto escrito.
+NOTE: This was cloned and translated from the original creator for ease of user-experience in English for English Speakers.
 
-Inicialmente, eu utilizava a biblioteca Whisper localmente no meu computador, manipulando os arquivos apenas por meio do prompt de comando. No entanto, conforme as solicitações para uso do Whisper em transcrições de vídeos se tornaram frequentes, percebi que essa necessidade era compartilhada por outras pessoas. Assim, surgiu a ideia de criar uma maneira mais acessível para aqueles que não têm contato frequente com tecnologia – especialmente para quem se sente intimidado ao utilizar o prompt de comando. A solução foi desenvolver uma aplicação desktop, com duas principais vantagens: ser gratuita e possibilitar transcrições sem a necessidade de conexão com a internet.
+---
 
-## 🚀 Funcionalidades
+# TextifyVoice - Audio and Video Transcription with Whisper
 
-- **Transcrição de Áudio e Vídeo**: Converta arquivos de áudio ou vídeo em texto com facilidade.
-- **Interface Gráfica Intuitiva**: Selecione e transcreva arquivos através de uma interface amigável.
-- **Suporte a Múltiplos Formatos**: Compatível com formatos como MP3, MP4, WAV, AAC, FLAC, M4A, OGG, entre outros.
-- **Download de Modelos Personalizável**: Escolha entre diferentes modelos de transcrição com base em suas necessidades.
-- **Processamento de Áudio Otimizado**: Utiliza FFmpeg para extrair trilhas sonoras de arquivos de vídeo.
-- **Salvamento Automático**: As transcrições são salvas em arquivos `.docx` no mesmo diretório dos arquivos originais.
-- **Cancelamento de Processos**: Possibilidade de cancelar downloads de modelos e transcrições em andamento.
+**TextifyVoice** is a practical application that combines OpenAI's Whisper ASR model with a simple and intuitive graphical interface. It serves as a versatile tool for transcribing audio and video, allowing users to easily convert spoken language into written text.
 
-## 📜 Requisitos
+Initially, I used the Whisper library locally on my computer, handling files solely through the command prompt. However, as requests for using Whisper to transcribe videos became more frequent, I realized that this need was shared by others. Thus, the idea emerged to create a more accessible solution for those who do not frequently interact with technology—especially for those who feel intimidated by using the command prompt. The solution was to develop a desktop application with two main advantages: it is free and enables transcriptions without the need for an internet connection.
 
-### Sistemas Operacionais Compatíveis:
+## 🚀 Features
 
-| Sistema Operacional | Executável Pré-compilado | Como Módulo Python | A Partir do Git |
+- **Audio and Video Transcription**: Easily convert audio or video files into text.
+- **Intuitive Graphical Interface**: Select and transcribe files through a user-friendly interface.
+- **Support for Multiple Formats**: Compatible with formats such as MP3, MP4, WAV, AAC, FLAC, M4A, OGG, among others.
+- **Customizable Model Download**: Choose from different transcription models based on your needs.
+- **Optimized Audio Processing**: Utilizes FFmpeg to extract audio tracks from video files.
+- **Automatic Saving**: Transcriptions are saved as `.docx` files in the same directory as the original files.
+- **Process Cancellation**: Ability to cancel ongoing model downloads and transcriptions.
+
+## 📜 Requirements
+
+### Compatible Operating Systems:
+
+| Operating System | Pre-compiled Executable | As Python Module | From Git |
 | --- | --- | --- | --- |
 | **Windows** | ✔️ | ✔️ | ✔️ |
 | **macOS** | ❌ | ✔️ | ✔️ |
 | **Linux** | ❌ | ✔️ | ✔️ |
-- **Python 3.8 ou superior** (Recomendado Python 3.11) para instalação como módulo.
-- **FFmpeg**: Necessário para processar arquivos de vídeo. Certifique-se de que o FFmpeg está instalado e configurado no PATH do sistema.
-- **Conexão com a Internet**: Necessária apenas para download dos modelos e atualizações.
+- **Python 3.8 or higher** (Python 3.11 recommended) for installation as a module.
+- **FFmpeg**: Required to process video files. Ensure that FFmpeg is installed and configured in the system PATH.
+- **Internet Connection**: Only necessary for downloading models and updates.
 
-### Requisitos de Hardware por Modelo:
+### Hardware Requirements per Model:
 
-| Modelo | Tempo de Transcrição* | Precisão | VRAM Requerida | Velocidade Relativa |
+| Model | Transcription Time* | Accuracy | Required VRAM | Relative Speed |
 | --- | --- | --- | --- | --- |
-| **Tiny** | 3 min | Baixa | ~1 GB | ~32x |
-| **Base** | 3 min | Média | ~1 GB | ~16x |
-| **Small** | 15 min | Alta | ~2 GB | ~6x |
-| **Medium** | 25 min | Muito Alta | ~5 GB | ~2x |
-| **Large-V1** | 1h 13min | Muito Alta | ~10 GB | 1x |
-| **Large-V2** | 1h 7min | Muito Alta | ~10 GB | 1x |
-| **Large-V3** | 1h 10min | Muito Alta | ~10 GB | 1x |
+| **Tiny** | 3 min | Low | ~1 GB | ~32x |
+| **Base** | 3 min | Medium | ~1 GB | ~16x |
+| **Small** | 15 min | High | ~2 GB | ~6x |
+| **Medium** | 25 min | Very High | ~5 GB | ~2x |
+| **Large-V1** | 1h 13min | Very High | ~10 GB | 1x |
+| **Large-V2** | 1h 7min | Very High | ~10 GB | 1x |
+| **Large-V3** | 1h 10min | Very High | ~10 GB | 1x |
 
-\*Tempo estimado para transcrever 1 hora de áudio. Pode variar dependendo do hardware.
+\*Estimated time to transcribe 1 hour of audio. May vary depending on hardware.
 
-## 🔧 Instalação
+## 🔧 Installation
 
-**FFmpeg** 
+**FFmpeg**
 
-Existem dois arquivos para instalação, `install_ffmpeg_profile.ps1` (instalação a nível de usuário atual) e `install_ffmpeg_adm.ps1` (instalação a nível de administrador). Esses scripts em PowerShell foram criados para facilitar o processo de instalação do FFmpeg, um programa essencial para a conversão de arquivos durante o uso da aplicação.
+There are two files for installation, `install_ffmpeg_profile.ps1` (installation at the current user level) and `install_ffmpeg_adm.ps1` (installation at the administrator level). These PowerShell scripts were created to facilitate the FFmpeg installation process, an essential program for file conversion during the application's use.
 
-Também existe uma maneira de instalar manualmente [LINK](https://www.wikihow.com/Install-FFmpeg-on-Windows).
+There is also a way to install manually [HERE](https://www.wikihow.com/Install-FFmpeg-on-Windows).
 
-### Executável Pré-compilado
+### Pre-compiled Executable
 
-1. **Download**: Baixe a versão mais recente [aqui](https://github.com/finnzao/TextifyVoiceDesktopPy/releases/tag/v1).
-2. **Instalação**: Extraia o arquivo baixado.
-3. **Execução**: Execute o arquivo `TextifyVoice.exe`.
-4. **Configuração**: Na primeira execução, configure as preferências conforme suas necessidades.
-5. **Uso**: Comece a transcrever seus arquivos!
+1. **Download**: Download the latest version [here](https://github.com/finnzao/TextifyVoiceDesktopPy/releases/tag/v1).
+2. **Installation**: Extract the downloaded file.
+3. **Execution**: Run the `TextifyVoice.exe` file.
+4. **Configuration**: On the first run, configure the preferences according to your needs.
+5. **Usage**: Start transcribing your files!
 
+## 🛠️ Development
 
+### Setup
 
-## 🛠️ Desenvolvimento
-
-### Configuração
-
-1. **Clone o Repositório**:
+1. **Clone the Repository**:
     
     ```bash
-    git clone <https://github.com/finnzao/TextifyVoiceDesktopPy.git>
-    
+    git clone https://github.com/finnzao/TextifyVoiceDesktopPy.git
     ```
     
-2. **Entre no Diretório do Projeto**:
+2. **Enter the Project Directory**:
     
     ```bash
     cd TextifyVoiceDesktopPy
-    
     ```
     
-3. **Crie um Ambiente Virtual**:
+3. **Create a Virtual Environment**:
     
     ```bash
     python -m venv venv
-    
     ```
     
-4. **Ative o Ambiente Virtual**:
+4. **Activate the Virtual Environment**:
     - **Windows**:
         
         ```bash
-        venv\\Scripts\\activate
-        
+        venv\Scripts\activate
         ```
         
     - **Linux/macOS**:
         
         ```bash
         source venv/bin/activate
-        
         ```
         
-5. **Instale as Dependências**:
+5. **Install Dependencies**:
     
     ```bash
     pip install -r requirements.txt
-    
     ```
     
 
-### Executando o Aplicativo
+### Running the Application
 
-Execute o aplicativo usando o seguinte comando:
+Run the application using the following command:
 
 ```bash
 python main.py
 ```
 
-### Compilação
+### Compilation
 
-Para compilar o projeto em um executável utilize **`pyinstaller`**:
+To compile the project into an executable, use **`pyinstaller`**:
 
 ```bash
 pyinstaller --windowed --hidden-import=whisper --icon="./bin/icon.ico" --add-data="./bin/ffmpeg.exe;bin" --add-data="config.json;." textifyVoiceModelDownload.py
 ```
 
-### Compatibilidade
+### Compatibility
 
-O projeto é compatível com Windows, Linux e macOS. Caso encontre algum bug ou problema, sinta-se à vontade para criar uma issue.
+The project is compatible with Windows, Linux, and macOS. If you encounter any bugs or issues, feel free to create an issue.
+```
